@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>假別登記行事曆</title>
+<style>
+  :root{
+    --bg:#EDEFEF; --surface:#FFFFFF; --ink:#1E2A32; --ink-soft:#5B6B72;
+    --line:#D7DCDC; --line-strong:#B9C2C2;
+    --open:#2F7A6B; --open-bg:#E4EFEC;
+    --warn:#C98A2B; --warn-bg:#FBF0DE;
+    --full:#B24A3B; --full-bg:#F7E5E1;
+    --info:#3D5A80; --today-ring:#1E2A32; --radius:10px;
+    --mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Microsoft JhengHei",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{max-width:980px;margin:0 auto;padding:28px 20px 80px;}
+  .storage-banner{display:none;background:var(--warn-bg);color:var(--warn);border:1px solid #E8CB99;border-radius:8px;padding:10px 14px;font-size:12.5px;margin-bottom:16px;}
+  .storage-banner.show{display:block;}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--ink-soft);text-transform:uppercase;margin:0 0 4px;}
+  h1{font-size:26px;font-weight:700;letter-spacing:-.01em;margin:0 0 16px;}
+  .tabs{display:flex;gap:18px;margin-bottom:22px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  .tab-btn{font:inherit;font-size:13.5px;font-weight:700;color:var(--ink-soft);background:none;border:none;padding:9px 2px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
+  .tab-btn.active{color:var(--ink);border-bottom-color:var(--info);}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
+  .card h2{font-size:15px;margin:0 0 4px;}
+  .card .sub{font-size:12px;color:var(--ink-soft);margin:0 0 16px;line-height:1.6;}
+
+  .qa-grid{display:grid;grid-template-columns:1fr 1.1fr 1fr 1fr auto auto;gap:10px;align-items:end;}
+  .qa-field label{display:block;font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+  .qa-field input[type=text], .qa-field input[type=date]{
+    width:100%;font:inherit;font-size:14px;padding:9px 10px;border-radius:8px;
+    border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);
+  }
+  .qa-field input[readonly]{background:var(--bg);color:var(--ink-soft);}
+  .qa-check{display:flex;align-items:center;gap:7px;padding-bottom:9px;white-space:nowrap;}
+  .qa-check input{width:16px;height:16px;}
+  .qa-check label{font-size:12.5px;font-weight:600;color:var(--ink);}
+  .qa-submit, .btn-primary{
+    font:inherit;font-size:13.5px;font-weight:700;background:var(--info);border:1px solid var(--info);color:#fff;
+    padding:10px 18px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:background .15s;
+  }
+  .qa-submit:hover, .btn-primary:hover{background:#324a68;}
+  .qa-hint{font-size:11.5px;color:var(--ink-soft);margin-top:10px;}
+  @media (max-width:820px){ .qa-grid{grid-template-columns:1fr 1fr;} .qa-check,.qa-submit{grid-column:1/-1;} }
+
+  .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:16px;}
+  .month-nav{display:flex;align-items:center;gap:14px;}
+  .month-nav button{width:32px;height:32px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;font-size:14px;color:var(--ink);display:flex;align-items:center;justify-content:center;}
+  .month-nav button:hover{background:var(--bg);}
+  .month-label{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;min-width:120px;text-align:center;}
+  .toolbar-actions{display:flex;gap:8px;align-items:center;}
+  .btn{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:8px;cursor:pointer;}
+  .btn:hover{background:var(--bg);}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn-danger-outline{border-color:var(--full);color:var(--full);}
+
+  .info-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:18px;}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);}
+  .legend-dot{width:8px;height:8px;border-radius:2px;}
+  .legend-tag{font-size:10.5px;font-weight:700;color:var(--warn);background:var(--warn-bg);border-radius:4px;padding:1px 5px;}
+  .summary-note{font-family:var(--mono);font-size:12px;color:var(--ink-soft);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;}
+  .summary-note b{color:var(--ink);font-weight:700;}
+
+  .weekday-row{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:6px;}
+  .weekday-row div{font-family:var(--mono);font-size:12.5px;letter-spacing:.08em;color:var(--ink-soft);text-align:center;padding:4px 0;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .day-cell{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);min-height:108px;padding:8px;cursor:pointer;display:flex;flex-direction:column;gap:6px;position:relative;}
+  .day-cell:hover{border-color:var(--line-strong);box-shadow:0 2px 8px rgba(30,42,50,.08);}
+  .day-cell.empty{background:transparent;border-color:transparent;cursor:default;box-shadow:none;}
+  .day-cell.weekend .day-num{color:var(--ink-soft);}
+  .day-cell.holiday .day-num{color:var(--full);}
+  .day-cell.today{border:1.5px solid var(--today-ring);}
+  .day-num{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .day-num.today-badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;}
+  .holiday-tag{font-family:var(--mono);font-size:11px;color:var(--full);font-weight:700;}
+  .day-cell.status-warn{background:var(--warn-bg);}
+  .day-cell.status-full{background:var(--full-bg);border-color:var(--full);}
+  .overflow-note{font-family:var(--mono);font-size:10px;color:var(--full);font-weight:700;}
+  .name-list{font-size:13px;color:var(--ink-soft);line-height:1.5;overflow:hidden;}
+  .name-list .more{color:var(--info);font-weight:600;}
+  .name-list .tt{color:var(--warn);}
+
+  .overlay{position:fixed;inset:0;background:rgba(30,42,50,.28);display:none;align-items:stretch;justify-content:flex-end;z-index:50;}
+  .overlay.show{display:flex;}
+  .panel{width:380px;max-width:92vw;background:var(--bg);height:100%;box-shadow:-8px 0 24px rgba(30,42,50,.18);padding:24px 22px;overflow-y:auto;transform:translateX(12px);opacity:0;animation:slideIn .18s ease forwards;}
+  @keyframes slideIn{to{transform:translateX(0);opacity:1;}}
+  .panel-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;}
+  .panel-date{font-size:19px;font-weight:700;}
+  .panel-weekday{font-family:var(--mono);font-size:12px;color:var(--ink-soft);margin-bottom:18px;}
+  .close-x{border:none;background:none;font-size:18px;cursor:pointer;color:var(--ink-soft);padding:4px;}
+  .capacity-line{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:10px 12px;border-radius:8px;margin-bottom:18px;}
+  .capacity-line.open{background:var(--open-bg);color:var(--open);}
+  .capacity-line.warn{background:var(--warn-bg);color:var(--warn);}
+  .capacity-line.full{background:var(--full-bg);color:var(--full);}
+  .section-label{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 8px;}
+  .person-row{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-bottom:7px;font-size:13.5px;}
+  .person-row .pname{font-weight:600;}
+  .person-row .prange{color:var(--ink-soft);font-size:11.5px;margin-top:2px;font-family:var(--mono);}
+  .pill{display:inline-block;font-size:10px;font-weight:700;color:var(--warn);background:var(--warn-bg);border-radius:5px;padding:1px 6px;margin-left:6px;}
+  .del-btn{border:none;background:none;color:var(--ink-soft);cursor:pointer;font-size:16px;padding:2px 4px;}
+  .del-btn:hover{color:var(--full);}
+  .empty-state{font-size:13px;color:var(--ink-soft);padding:14px 0;text-align:center;border:1px dashed var(--line-strong);border-radius:8px;margin-bottom:16px;}
+  .panel-hint{font-size:12px;color:var(--ink-soft);line-height:1.6;margin-top:18px;border-top:1px solid var(--line);padding-top:16px;}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(30,42,50,.28);display:none;align-items:center;justify-content:center;z-index:60;padding:20px;}
+  .modal-overlay.show{display:flex;}
+  .modal{background:var(--surface);border-radius:12px;padding:24px;width:400px;max-width:100%;box-shadow:0 12px 32px rgba(30,42,50,.24);max-height:86vh;overflow-y:auto;}
+  .modal h3{margin:0 0 4px;font-size:16px;}
+  .modal p{margin:0 0 16px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
+  .conflict-list{list-style:none;margin:0 0 4px;padding:0;}
+  .conflict-list li{background:var(--warn-bg);border:1px solid #E8CB99;border-radius:8px;padding:9px 11px;margin-bottom:7px;font-size:12.5px;color:var(--ink);}
+  .conflict-list li b{font-family:var(--mono);}
+  .conflict-list li.full-item{background:var(--full-bg);border-color:#E3B7AC;}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;z-index:80;max-width:90vw;text-align:center;}
+  .toast.show{opacity:1;transform:translate(-50%,-6px);}
+  .loading{padding:60px 0;text-align:center;color:var(--ink-soft);font-size:13px;}
+
+  table.data-table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  table.data-table th, table.data-table td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);}
+  table.data-table th{font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--ink-soft);text-transform:uppercase;font-weight:600;}
+  table.data-table td.num{font-variant-numeric:tabular-nums;font-weight:700;}
+  table.data-table tr.total-row td{font-weight:700;border-top:2px solid var(--line-strong);border-bottom:none;}
+
+  .emp-add-grid{display:grid;grid-template-columns:1fr 1.4fr auto;gap:10px;align-items:end;margin-bottom:18px;}
+  .emp-add-grid .qa-field label{display:block;font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+  .emp-add-grid input{width:100%;font:inherit;font-size:14px;padding:9px 10px;border-radius:8px;border:1px solid var(--line-strong);}
+  @media (max-width:600px){.emp-add-grid{grid-template-columns:1fr;}}
+
+  .holiday-row{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+  .holiday-row select{font:inherit;font-size:14px;padding:9px 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);}
+  .holiday-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
+  .holiday-chip{font-family:var(--mono);font-size:11px;background:var(--full-bg);color:var(--full);border-radius:5px;padding:3px 7px;display:inline-flex;align-items:center;gap:5px;}
+  .holiday-chip .chip-del{border:none;background:none;color:var(--full);cursor:pointer;font-weight:700;font-size:11px;padding:0;line-height:1;opacity:.7;}
+  .holiday-chip .chip-del:hover{opacity:1;}
+  details.advanced{margin-top:6px;}
+  details.advanced summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--info);margin-bottom:10px;}
+  .advanced textarea{width:100%;min-height:100px;font:inherit;font-family:var(--mono);font-size:12px;padding:10px;border-radius:8px;border:1px solid var(--line-strong);resize:vertical;}
+  .notice-textarea{width:100%;min-height:110px;font:inherit;font-size:13.5px;padding:10px;border-radius:8px;border:1px solid var(--line-strong);resize:vertical;}
+
+  @media (max-width:640px){ .day-cell{min-height:78px;padding:6px;} .name-list{display:none;} h1{font-size:21px;} table.data-table{font-size:12px;} }
+</style>
+</head>
+<body>
+<div id="app">
+  <p class="eyebrow">部門休假總覽・共用行事曆</p>
+  <h1>假別登記行事曆</h1>
+  <div class="loading" id="loading">載入中…</div>
+</div>
+
+<div class="overlay" id="panelOverlay"><div class="panel" id="panel"></div></div>
+
+<div class="modal-overlay" id="settingsOverlay">
+  <div class="modal">
+    <h3>登記上限設定</h3>
+    <p>設定同一天最多可登記休假的人數。所有同事會看到相同的設定。</p>
+    <div class="qa-field" style="margin-bottom:0;">
+      <label for="maxInput">每日上限人數</label>
+      <input type="text" inputmode="numeric" id="maxInput" style="width:100%;font:inherit;font-size:14px;padding:9px 10px;border-radius:8px;border:1px solid var(--line-strong);">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeSettings()">取消</button>
+      <button class="btn-primary" onclick="saveSettingsFromModal()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="conflictOverlay">
+  <div class="modal">
+    <h3>這段期間已經有人登記了</h3>
+    <p>送出前請確認以下日期的登記狀況：</p>
+    <ul class="conflict-list" id="conflictList"></ul>
+    <div class="modal-actions">
+      <button class="btn" onclick="cancelConflict()">返回修改</button>
+      <button class="btn-primary" onclick="confirmConflict()">仍要送出登記</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const WEEKDAYS = ['日','一','二','三','四','五','六'];
+const MIN_DAYS = 3;
+
+/* 資料整理自行政院人事行政總處歷年公告的政府行政機關辦公日曆表，僅供參考；
+   如遇官方後續修正或補假規則調整，仍以人事行政總處正式公告為準。 */
+const YEAR_HOLIDAYS = {
+  2026: [
+    {date:'2026-01-01', name:'元旦'},
+    {date:'2026-02-15', name:'小年夜'},
+    {date:'2026-02-16', name:'除夕'},
+    {date:'2026-02-17', name:'春節初一'},
+    {date:'2026-02-18', name:'春節初二'},
+    {date:'2026-02-19', name:'春節初三'},
+    {date:'2026-02-28', name:'和平紀念日'},
+    {date:'2026-04-04', name:'兒童節'},
+    {date:'2026-04-05', name:'清明節'},
+    {date:'2026-05-01', name:'勞動節'},
+    {date:'2026-06-19', name:'端午節'},
+    {date:'2026-09-25', name:'中秋節'},
+    {date:'2026-09-28', name:'教師節'},
+    {date:'2026-10-10', name:'國慶日'},
+    {date:'2026-10-25', name:'台灣光復節'},
+    {date:'2026-12-25', name:'行憲紀念日'},
+  ],
+  2027: [
+    {date:'2027-01-01', name:'元旦'},
+    {date:'2027-02-04', name:'小年夜'},
+    {date:'2027-02-05', name:'除夕'},
+    {date:'2027-02-06', name:'春節初一'},
+    {date:'2027-02-07', name:'春節初二'},
+    {date:'2027-02-08', name:'春節初三'},
+    {date:'2027-02-09', name:'春節補假'},
+    {date:'2027-02-10', name:'春節補假'},
+    {date:'2027-02-28', name:'和平紀念日'},
+    {date:'2027-03-01', name:'和平紀念日補假'},
+    {date:'2027-04-04', name:'兒童節'},
+    {date:'2027-04-05', name:'清明節'},
+    {date:'2027-04-06', name:'兒童節補假'},
+    {date:'2027-04-30', name:'勞動節補假'},
+    {date:'2027-05-01', name:'勞動節'},
+    {date:'2027-06-09', name:'端午節'},
+    {date:'2027-09-15', name:'中秋節'},
+    {date:'2027-09-28', name:'教師節'},
+    {date:'2027-10-10', name:'國慶日'},
+    {date:'2027-10-11', name:'國慶日補假'},
+    {date:'2027-10-25', name:'台灣光復節'},
+    {date:'2027-12-24', name:'行憲紀念日補假'},
+    {date:'2027-12-25', name:'行憲紀念日'},
+    {date:'2027-12-31', name:'元旦補假（117年）'},
+  ],
+};
+// All built-in years merged (deduped by date) — used as a fallback default only if
+// the backend can't be reached at all (e.g. first load with no network).
+const ALL_BUILTIN_HOLIDAYS = (() => {
+  const map = new Map();
+  Object.values(YEAR_HOLIDAYS).flat().forEach(h => map.set(h.date, h.name));
+  return [...map.entries()].map(([date,name]) => ({date, name}));
+})();
+
+const state = {
+  entries: [],      // {id, empId, name, dates:[iso...], tentative:bool, createdAt}
+  employees: [],    // {empId, name}
+  holidays: [],
+  notice: '',
+  maxPerDay: 3,
+  currentDate: new Date(),
+  selectedDateStr: null,
+  loaded: false,
+  backendAvailable: true,
+  pendingSubmit: null,
+  view: 'calendar',
+};
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function toISO(y,m,d){ return `${y}-${pad(m+1)}-${pad(d)}`; }
+function todayISO(){ const t=new Date(); return toISO(t.getFullYear(), t.getMonth(), t.getDate()); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtRange(dates){ return dates.length===1 ? dates[0] : `${dates[0]} ~ ${dates[dates.length-1]}`; }
+
+/* ============ Backend (Google Apps Script) — JSONP only, no CORS involved ============ */
+const EXEC_URL = 'https://script.google.com/macros/s/AKfycbz77tKex7VF3Vt095CxWLZ493UzO77QoVSr5oC0MSjzr2Q1UdbROLSobb6r3AiZp7iB/exec';
+
+function jsonp(params){
+  return new Promise((resolve, reject) => {
+    const cbName = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random()*1e6);
+    const script = document.createElement('script');
+    const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 15000);
+    function cleanup(){
+      clearTimeout(timer);
+      try{ delete window[cbName]; }catch(e){}
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName] = (data) => { cleanup(); resolve(data); };
+    const qs = Object.entries({...params, callback: cbName})
+      .map(([k,v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
+      .join('&');
+    script.src = EXEC_URL + '?' + qs;
+    script.onerror = () => { cleanup(); reject(new Error('network error')); };
+    document.body.appendChild(script);
+  });
+}
+
+async function apiCall(params){
+  const data = await jsonp(params);
+  if(!data || data.ok === false) throw new Error((data && data.error) || 'backend error');
+  return data;
+}
+
+async function refreshFromServer(){
+  try{
+    const data = await apiCall({action: 'getAll'});
+    state.entries = (data.entries || []).map(e => ({...e, dates: Array.isArray(e.dates) ? e.dates : []}));
+    state.employees = data.employees || [];
+    state.holidays = (data.holidays || []).map(h => typeof h === 'string' ? {date:h, name:'國定假日'} : h);
+    state.notice = data.notice || '';
+    state.maxPerDay = Number(data.maxPerDay) || 3;
+    state.backendAvailable = true;
+    return true;
+  }catch(e){
+    state.backendAvailable = false;
+    return false;
+  }
+}
+
+async function init(){
+  const ok = await refreshFromServer();
+  if(!ok && state.holidays.length === 0){ state.holidays = [...ALL_BUILTIN_HOLIDAYS]; }
+  try{ state.myEmpId = localStorage.getItem('my-empid') || ''; }catch(e){ state.myEmpId = ''; }
+  state.loaded = true;
+  renderApp();
+}
+
+function subsFor(dateStr){ return state.entries.filter(e => e.dates.includes(dateStr)); }
+function statusFor(count){ if(count >= state.maxPerDay) return 'full'; if(count > 0 && state.maxPerDay - count === 1) return 'warn'; return 'open'; }
+function holidayName(dateStr){ const h = state.holidays.find(x=>x.date===dateStr); return h ? h.name : null; }
+function isHoliday(dateStr){ return holidayName(dateStr) !== null; }
+function coversHoliday(sub){ return sub.dates.some(isHoliday); }
+function nameForEmpId(empId){ const e = state.employees.find(x=>x.empId===empId); return e ? e.name : null; }
+function displayName(sub){ return (sub.empId && nameForEmpId(sub.empId)) || sub.name || '(未命名)'; }
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=>t.classList.remove('show'), 2800);
+}
+function switchView(v){ state.view = v; renderApp(); }
+
+function renderApp(){
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <p class="eyebrow">部門休假總覽・共用行事曆</p>
+    <h1>假別登記行事曆</h1>
+    <div class="storage-banner ${state.backendAvailable ? '' : 'show'}">
+      ⚠️ 目前無法連線到後端資料庫（Google Sheet），請檢查網路連線，或稍後重新整理頁面再試。畫面上顯示的資料可能不是最新版本。
+    </div>
+    <div class="tabs">
+      <button class="tab-btn ${state.view==='calendar'?'active':''}" onclick="switchView('calendar')">行事曆</button>
+      <button class="tab-btn ${state.view==='stats'?'active':''}" onclick="switchView('stats')">統計頁面</button>
+      <button class="tab-btn ${state.view==='employees'?'active':''}" onclick="switchView('employees')">員工設定</button>
+    </div>
+    <div id="viewRoot"></div>
+  `;
+  if(state.view === 'calendar') renderCalendarView();
+  else if(state.view === 'employees') renderEmployeeView();
+  else renderStatsView();
+}
+
+/* ================= CALENDAR VIEW ================= */
+function renderCalendarView(){
+  const root = document.getElementById('viewRoot');
+  const y = state.currentDate.getFullYear();
+  const m = state.currentDate.getMonth();
+  const today = todayISO();
+
+  root.innerHTML = `
+    <div class="card">
+      <h2>新增休假登記</h2>
+      <p class="sub">輸入員工編號（會自動帶出姓名）與起訖日期，同一次登記至少需連續 ${MIN_DAYS} 天；送出後行事曆自動更新，若日期已有人登記過會先跳提醒。</p>
+      <form onsubmit="return handleQuickAdd(event)">
+        <div class="qa-grid">
+          <div class="qa-field">
+            <label for="qaEmpId">員工編號</label>
+            <input type="text" id="qaEmpId" placeholder="輸入員工編號" oninput="handleEmpIdInput()" required>
+          </div>
+          <div class="qa-field">
+            <label for="qaName">姓名</label>
+            <input type="text" id="qaName" placeholder="依員工編號自動帶入" required>
+          </div>
+          <div class="qa-field">
+            <label for="qaStart">開始日期</label>
+            <input type="date" id="qaStart" onchange="handleStartDateChange()" required>
+          </div>
+          <div class="qa-field">
+            <label for="qaEnd">結束日期</label>
+            <input type="date" id="qaEnd" required>
+          </div>
+          <div class="qa-check">
+            <input type="checkbox" id="qaTentative">
+            <label for="qaTentative">暫定</label>
+          </div>
+          <button type="submit" class="qa-submit">送出登記</button>
+        </div>
+      </form>
+      <p class="qa-hint">找不到員工編號時，姓名欄位可以手動輸入。「暫定」代表這次登記尚未確定，之後可能調整，且不會計入統計頁面的已確定次數。</p>
+    </div>
+
+    <div class="toolbar">
+      <div class="month-nav">
+        <button onclick="changeMonth(-1)" aria-label="上個月">‹</button>
+        <div class="month-label">${y} 年 ${m+1} 月</div>
+        <button onclick="changeMonth(1)" aria-label="下個月">›</button>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn" onclick="goToday()">回到今天</button>
+        <button class="btn" onclick="openSettings()">登記上限：${state.maxPerDay} 人</button>
+      </div>
+    </div>
+    <div class="info-row">
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--warn-bg);border:1px solid var(--warn);"></span>剩最後 1 位</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--full-bg);border:1px solid var(--full);"></span>已達上限（整格變色）</div>
+        <div class="legend-item"><span class="legend-tag">暫定</span>暫定登記</div>
+        <div class="legend-item" style="color:var(--full);">紅色日期＝國定假日</div>
+      </div>
+    </div>
+    <div class="weekday-row">${WEEKDAYS.map(w=>`<div>${w}</div>`).join('')}</div>
+    <div class="cal-grid" id="calGrid"></div>
+  `;
+  renderGrid(y, m);
+
+  const qaStart = document.getElementById('qaStart');
+  const qaEnd = document.getElementById('qaEnd');
+  if(qaStart && !qaStart.value) qaStart.value = today;
+  if(qaEnd && !qaEnd.value){
+    const endDate = new Date(today+'T00:00:00');
+    endDate.setDate(endDate.getDate() + (MIN_DAYS-1));
+    qaEnd.value = toISO(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  }
+  if(qaEnd) qaEnd.dataset.forStart = qaStart.value;
+  const qaEmpId = document.getElementById('qaEmpId');
+  if(qaEmpId && state.myEmpId){ qaEmpId.value = state.myEmpId; handleEmpIdInput(); }
+}
+
+function handleStartDateChange(){
+  const startVal = document.getElementById('qaStart').value;
+  if(!startVal) return;
+  const endInput = document.getElementById('qaEnd');
+  // keep whatever length of stay was already chosen, but always shift the end date to
+  // land after the new start date — avoids re-dragging the end-date picker forward
+  // by hand when the start date is months away.
+  const prevStart = endInput.dataset.forStart;
+  const prevEnd = endInput.value;
+  let spanDays = MIN_DAYS - 1;
+  if(prevStart && prevEnd){
+    const diff = Math.round((new Date(prevEnd+'T00:00:00') - new Date(prevStart+'T00:00:00')) / 86400000);
+    if(diff >= (MIN_DAYS-1)) spanDays = diff;
+  }
+  const start = new Date(startVal+'T00:00:00');
+  const end = new Date(start);
+  end.setDate(end.getDate() + spanDays);
+  endInput.value = toISO(end.getFullYear(), end.getMonth(), end.getDate());
+  endInput.dataset.forStart = startVal;
+
+  // pop the end-date picker open right away so the person can see/adjust it
+  // instead of having to click into the field separately.
+  if(typeof endInput.showPicker === 'function'){
+    try{ endInput.focus(); endInput.showPicker(); }catch(e){ /* not supported in this browser, ignore */ }
+  }else{
+    endInput.focus();
+  }
+}
+
+function handleEmpIdInput(){
+  const idVal = document.getElementById('qaEmpId').value.trim();
+  const nameInput = document.getElementById('qaName');
+  const match = state.employees.find(e=>e.empId===idVal);
+  if(match){
+    nameInput.value = match.name;
+    nameInput.readOnly = true;
+    nameInput.dataset.auto = '1';
+  }else{
+    if(nameInput.dataset.auto === '1'){ nameInput.value=''; nameInput.dataset.auto=''; }
+    nameInput.readOnly = false;
+  }
+}
+
+function renderGrid(y, m){
+  const grid = document.getElementById('calGrid');
+  const firstWeekday = new Date(y, m, 1).getDay();
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const today = todayISO();
+  let html = '';
+  for(let i=0;i<firstWeekday;i++){ html += `<div class="day-cell empty"></div>`; }
+  for(let d=1; d<=daysInMonth; d++){
+    const dateStr = toISO(y,m,d);
+    const dow = new Date(y,m,d).getDay();
+    const isWeekend = dow===0 || dow===6;
+    const isToday = dateStr === today;
+    const holidayLabel = holidayName(dateStr);
+    const holiday = holidayLabel !== null;
+    const daySubs = subsFor(dateStr);
+    const count = daySubs.length;
+    const status = statusFor(count);
+    const overflow = count > state.maxPerDay ? `<div class="overflow-note">超額 +${count-state.maxPerDay}</div>` : '';
+    const namesToShow = daySubs.slice(0,2).map(e=>`${escapeHtml(displayName(e))}${e.tentative?'<span class="tt">・暫</span>':''}`).join('、');
+    const moreCount = daySubs.length - 2;
+    const namesHtml = daySubs.length ? `<div class="name-list">${namesToShow}${moreCount>0 ? ` <span class="more">+${moreCount}</span>` : ''}</div>` : '';
+    html += `
+      <div class="day-cell status-${status} ${isWeekend?'weekend':''} ${isToday?'today':''} ${holiday?'holiday':''}" onclick="openDay('${dateStr}')">
+        <div class="day-num ${isToday?'today-badge':''}">${d}</div>
+        ${holiday ? `<div class="holiday-tag" title="${escapeHtml(holidayLabel)}">${escapeHtml(holidayLabel)}</div>` : ''}
+        ${overflow}
+        ${namesHtml}
+      </div>
+    `;
+  }
+  grid.innerHTML = html;
+}
+
+function changeMonth(delta){ state.currentDate = new Date(state.currentDate.getFullYear(), state.currentDate.getMonth()+delta, 1); renderApp(); }
+function goToday(){ state.currentDate = new Date(); renderApp(); }
+
+function getDateRange(startStr, endStr){
+  const start = new Date(startStr + 'T00:00:00');
+  const end = new Date(endStr + 'T00:00:00');
+  if(isNaN(start) || isNaN(end) || start > end) return null;
+  const dates = []; let cur = new Date(start); let guard = 0;
+  while(cur <= end && guard < 366){ dates.push(toISO(cur.getFullYear(), cur.getMonth(), cur.getDate())); cur.setDate(cur.getDate()+1); guard++; }
+  return dates;
+}
+
+function computeConflicts(dates){
+  return dates.map(d => ({date: d, list: subsFor(d)})).filter(x => x.list.length > 0).map(x => ({
+    date: x.date,
+    names: x.list.map(e => displayName(e) + (e.tentative ? '（暫定）' : '')),
+    willBeFull: (x.list.length + 1) >= state.maxPerDay,
+  }));
+}
+
+function handleQuickAdd(evt){
+  evt.preventDefault();
+  const empId = document.getElementById('qaEmpId').value.trim();
+  const name = document.getElementById('qaName').value.trim();
+  const start = document.getElementById('qaStart').value;
+  const end = document.getElementById('qaEnd').value;
+  const tentative = document.getElementById('qaTentative').checked;
+  if(!empId){ showToast('請輸入員工編號'); return false; }
+  if(!name){ showToast('請輸入姓名，或確認員工編號是否正確'); return false; }
+  if(!start || !end){ showToast('請選擇日期'); return false; }
+  const dates = getDateRange(start, end);
+  if(!dates){ showToast('結束日期不能早於開始日期'); return false; }
+  if(dates.length < MIN_DAYS){ showToast(`同一次登記至少需連續 ${MIN_DAYS} 天（目前只選了 ${dates.length} 天）`); return false; }
+
+  const conflicts = computeConflicts(dates);
+  if(conflicts.length > 0){
+    state.pendingSubmit = {dates, empId, name, tentative};
+    showConflictModal(conflicts);
+  }else{
+    finalizeQuickAdd(dates, empId, name, tentative);
+  }
+  return false;
+}
+
+async function finalizeQuickAdd(dates, empId, name, tentative){
+  try{
+    await apiCall({action:'addEntry', empId, name, dates: dates.join(','), tentative: tentative ? '1' : '0'});
+    state.myEmpId = empId;
+    try{ localStorage.setItem('my-empid', empId); }catch(e){}
+    await refreshFromServer();
+    showToast(`已登記 ${name} — ${fmtRange(dates)}${tentative ? '（暫定）' : ''}`);
+  }catch(e){
+    showToast('登記失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+  }
+  renderApp();
+}
+
+function showConflictModal(conflicts){
+  document.getElementById('conflictList').innerHTML = conflicts.map(c => `
+    <li class="${c.willBeFull ? 'full-item' : ''}"><b>${c.date}</b>　已有：${c.names.map(escapeHtml).join('、')}${c.willBeFull ? '（登記後將達上限）' : ''}</li>
+  `).join('');
+  document.getElementById('conflictOverlay').classList.add('show');
+}
+function cancelConflict(){ document.getElementById('conflictOverlay').classList.remove('show'); state.pendingSubmit = null; }
+async function confirmConflict(){
+  document.getElementById('conflictOverlay').classList.remove('show');
+  if(!state.pendingSubmit) return;
+  const {dates, empId, name, tentative} = state.pendingSubmit;
+  state.pendingSubmit = null;
+  await finalizeQuickAdd(dates, empId, name, tentative);
+}
+
+function openDay(dateStr){ state.selectedDateStr = dateStr; document.getElementById('panelOverlay').classList.add('show'); renderPanel(); }
+function closeDay(){ document.getElementById('panelOverlay').classList.remove('show'); state.selectedDateStr = null; }
+document.getElementById('panelOverlay').addEventListener('click', (e)=>{ if(e.target.id === 'panelOverlay') closeDay(); });
+
+function isPastSubmission(sub){
+  const lastDate = sub.dates[sub.dates.length - 1];
+  return lastDate < todayISO();
+}
+
+function renderPanel(){
+  const dateStr = state.selectedDateStr;
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const dow = WEEKDAYS[new Date(y,m-1,d).getDay()];
+  const daySubs = subsFor(dateStr);
+  const count = daySubs.length;
+  const status = statusFor(count);
+  const remaining = state.maxPerDay - count;
+  const holidayLabel = holidayName(dateStr);
+  const capLabel = status==='full' ? `已達上限（${count}/${state.maxPerDay}）` : status==='warn' ? `剩最後 1 位（${count}/${state.maxPerDay}）` : `尚可登記 ${remaining} 位（${count}/${state.maxPerDay}）`;
+
+  document.getElementById('panel').innerHTML = `
+    <div class="panel-head">
+      <div>
+        <div class="panel-date">${y} 年 ${m} 月 ${d} 日 ${holidayLabel ? `🔴 ${escapeHtml(holidayLabel)}` : ''}</div>
+        <div class="panel-weekday">星期${dow}</div>
+      </div>
+      <button class="close-x" onclick="closeDay()">✕</button>
+    </div>
+    <div class="capacity-line ${status}">${capLabel}</div>
+    <p class="section-label">已登記名單</p>
+    ${daySubs.length===0 ? `<div class="empty-state">這天還沒有人登記休假</div>` : daySubs.map(e=>{
+      const locked = isPastSubmission(e);
+      return `
+      <div class="person-row">
+        <div>
+          <div class="pname">${escapeHtml(displayName(e))}${e.tentative ? '<span class="pill">暫定</span>' : ''}</div>
+          <div class="prange">${fmtRange(e.dates)}${e.empId ? ' ・ ' + escapeHtml(e.empId) : ''}</div>
+        </div>
+        ${locked
+          ? `<span title="日期已過，為維持紀錄完整不可刪除" style="font-size:13px;color:var(--ink-soft);padding:2px 4px;">🔒</span>`
+          : `<button class="del-btn" onclick="removeSubmission('${e.id}')" title="取消整筆登記">✕</button>`}
+      </div>
+    `;
+    }).join('')}
+    <p class="panel-hint">如需新增登記，請使用「行事曆」頁面上方的「新增休假登記」表單（同一次登記至少需連續 ${MIN_DAYS} 天）。刪除會取消整筆登記（含所有涵蓋日期）；日期已經過去的登記會鎖定、無法刪除，避免事後竄改紀錄。</p>
+  `;
+}
+
+async function removeSubmission(id){
+  const sub = state.entries.find(e => e.id === id);
+  if(sub && isPastSubmission(sub)){
+    showToast('日期已過的登記無法刪除，以維持紀錄完整性');
+    return;
+  }
+  try{
+    await apiCall({action:'deleteEntry', id});
+    await refreshFromServer();
+    showToast('已取消這筆登記');
+  }catch(e){
+    showToast('取消失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+  }
+  renderPanel(); renderApp();
+  document.getElementById('panelOverlay').classList.add('show');
+}
+
+function openSettings(){ document.getElementById('maxInput').value = state.maxPerDay; document.getElementById('settingsOverlay').classList.add('show'); }
+function closeSettings(){ document.getElementById('settingsOverlay').classList.remove('show'); }
+async function saveSettingsFromModal(){
+  const v = parseInt(document.getElementById('maxInput').value, 10);
+  if(!v || v < 1){ showToast('請輸入有效的人數'); return; }
+  try{
+    await apiCall({action:'setMaxPerDay', value: v});
+    await refreshFromServer();
+    showToast(`每日上限已更新為 ${v} 人`);
+  }catch(e){
+    showToast('更新失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+  }
+  closeSettings(); renderApp();
+}
+
+/* ================= EMPLOYEE VIEW ================= */
+function renderEmployeeView(){
+  const root = document.getElementById('viewRoot');
+  const sortedEmp = [...state.employees].sort((a,b)=>a.empId.localeCompare(b.empId));
+  const sortedHolidays = [...state.holidays].sort((a,b)=>a.date.localeCompare(b.date));
+  const builtinYears = Object.keys(YEAR_HOLIDAYS).sort();
+  const nowY = new Date().getFullYear();
+  const startYear = 2027;
+  const endYear = Math.max(startYear + 3, nowY + 3);
+  const yearOptions = []; for(let y=startYear; y<=endYear; y++) yearOptions.push(String(y));
+
+  root.innerHTML = `
+    <div class="card">
+      <h2>員工名冊</h2>
+      <p class="sub">設定員工編號與姓名，之後在行事曆登記假別時輸入編號即可自動帶入姓名；統計頁面也會依這裡的姓名自動顯示（修改姓名後，歷史紀錄會一起更新）。</p>
+      <form onsubmit="return handleAddEmployee(event)">
+        <div class="emp-add-grid">
+          <div class="qa-field"><label for="empIdNew">員工編號</label><input type="text" id="empIdNew" placeholder="例如 E001" required></div>
+          <div class="qa-field"><label for="empNameNew">姓名</label><input type="text" id="empNameNew" placeholder="輸入姓名" required></div>
+          <button type="submit" class="qa-submit">新增／更新</button>
+        </div>
+      </form>
+      <table class="data-table">
+        <thead><tr><th>員工編號</th><th>姓名</th><th></th></tr></thead>
+        <tbody>
+          ${sortedEmp.length===0 ? `<tr><td colspan="3" style="color:var(--ink-soft);text-align:center;padding:16px 0;">尚未設定員工</td></tr>` :
+            sortedEmp.map(e=>`
+              <tr>
+                <td>${escapeHtml(e.empId)}</td>
+                <td>${escapeHtml(e.name)}</td>
+                <td style="text-align:right;"><button class="del-btn" onclick="removeEmployee('${escapeHtml(e.empId)}')" title="刪除">✕</button></td>
+              </tr>
+            `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>資料備份與還原</h2>
+      <p class="sub">把目前所有資料（員工名冊、休假登記、國定假日清單、注意事項、每日上限）打包下載成一個檔案；日後如果需要換一份新版本的工具（例如重新發布產生新連結），可以用這個檔案把資料一次還原回來，不用重新一筆一筆輸入。</p>
+      <div class="modal-actions" style="justify-content:flex-start;margin-top:0;">
+        <button class="btn-primary" onclick="exportBackup()">匯出備份（下載檔案）</button>
+        <button class="btn" onclick="document.getElementById('importFileInput').click()">匯入備份（選擇檔案）</button>
+        <input type="file" id="importFileInput" accept="application/json,.json" style="display:none;" onchange="handleImportFile(event)">
+      </div>
+      <p class="sub" style="margin:10px 0 0;">匯入是把備份檔案的內容<b>合併</b>進目前的資料（同員工編號會更新姓名、同日期的國定假日會更新名稱），不會刪除既有的登記；匯入前系統會先跟你確認一次備份檔裡的筆數，資料量大時匯入需要一點時間，請耐心等候。</p>
+    </div>
+
+    <div class="card">
+      <h2>國定假日設定（依人事行政總處公告）</h2>
+      <p class="sub">下拉選單目前已內建 ${builtinYears.join('、')} 年資料，選好年度按「更新」就能一鍵帶入。也可以試試「自動抓取」，會即時連線到公開的政府行事曆資料整理專案抓取當年度資料。</p>
+      <div class="holiday-row">
+        <div class="qa-field" style="margin:0;">
+          <label for="holidayYear">選擇年度</label>
+          <select id="holidayYear">
+            ${yearOptions.map(y=>`<option value="${y}">${y} 年${builtinYears.includes(y) ? '' : '（尚無內建，可試自動抓取）'}</option>`).join('')}
+          </select>
+        </div>
+        <button class="btn-primary" onclick="applyYearHolidays()">更新（用內建資料）</button>
+        <button id="fetchBtn" class="btn" onclick="fetchAndApplyYear()">自動抓取（連線更新）</button>
+        <button class="btn btn-danger-outline" onclick="clearHolidays()">清空清單</button>
+      </div>
+      <p class="sub" style="margin-bottom:8px;">
+        「自動抓取」會連到 <a href="https://github.com/ruyut/TaiwanCalendar" target="_blank" rel="noopener">TaiwanCalendar</a> 這個開源專案即時下載當年度資料（依政府公告整理，非官方本身提供），需要當時網路連線正常且該年度資料已公開；抓不到時會提示改用手動輸入。建議抓取後仍對照官方公告核對一次。
+      </p>
+      <p class="sub" style="margin-bottom:8px;">目前清單（共 ${sortedHolidays.length} 天）：</p>
+      <div class="holiday-chips">
+        ${sortedHolidays.length ? sortedHolidays.map(h=>{
+          const isPastYear = parseInt(h.date.slice(0,4),10) < new Date().getFullYear();
+          return `<span class="holiday-chip">${h.date}　${escapeHtml(h.name)}${isPastYear ? `<button class="chip-del" onclick="removeHoliday('${h.date}')" title="刪除這筆（已是過去年度）">✕</button>` : ''}</span>`;
+        }).join('') : '<span style="font-size:12px;color:var(--ink-soft);">尚未設定</span>'}
+      </div>
+      <p class="sub" style="margin:0 0 8px;">往年（今年以前）的假日資料旁邊會有 ✕ 可以個別刪除，方便清掉不再需要的舊資料；今年與未來年度的資料為避免誤刪不提供逐筆刪除，如需整批清空可用上方「清空清單」。</p>
+    </div>
+
+    <div class="card">
+      <h2>如果自動抓取失敗，自己手動更新</h2>
+      <p class="sub">自動抓取偶爾會因為網路限制或該年度資料還沒公開而失敗。這時任何接手的人都可以照下面步驟自己完成，不需要依賴特定人員：</p>
+      <ol style="font-size:12.5px;color:var(--ink-soft);line-height:1.9;margin:0 0 14px;padding-left:20px;">
+        <li>查詢正式公告：到人事行政總處全球資訊網（<a href="https://www.dgpa.gov.tw" target="_blank" rel="noopener">www.dgpa.gov.tw</a>），或用搜尋引擎搜尋「人事行政總處　OO年　政府行政機關辦公日曆表」，找到當年度的正式公告。</li>
+        <li>把公告裡列出的每個國定假日，整理成「日期,假別名稱」，一行一筆，例如：<br><code style="font-family:var(--mono);">2028-01-01,元旦</code></li>
+        <li>把整理好的內容貼到下方文字框，按「儲存手動清單」即可，所有同事會立刻看到更新後的清單。</li>
+      </ol>
+      <details class="advanced" open>
+        <summary>手動編輯清單</summary>
+        <textarea id="holidayTextarea" placeholder="每行一筆，格式：YYYY-MM-DD,假別名稱&#10;例如：2028-01-01,元旦">${sortedHolidays.map(h=>`${h.date},${h.name}`).join('\n')}</textarea>
+        <p class="sub" style="margin:8px 0 0;">每行一筆，格式為「日期,假別名稱」（用半形逗號分隔），例如 2028-09-15,中秋節；未寫名稱時會顯示為「國定假日」。儲存會整份覆蓋目前清單。</p>
+        <div class="modal-actions" style="margin-top:10px;">
+          <button class="btn-primary" onclick="saveHolidaysManual()">儲存手動清單</button>
+        </div>
+      </details>
+    </div>
+  `;
+}
+
+function exportBackup(){
+  const backup = {
+    kind: 'leave-calendar-backup',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    maxPerDay: state.maxPerDay,
+    entries: state.entries,
+    employees: state.employees,
+    holidays: state.holidays,
+    notice: state.notice,
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `leave-calendar-backup-${todayISO().replace(/-/g,'')}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('已下載備份檔案');
+}
+
+async function handleImportFile(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if(!data || typeof data !== 'object') throw new Error('bad-format');
+
+    const employees = Array.isArray(data.employees) ? data.employees : [];
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    const holidays = Array.isArray(data.holidays)
+      ? data.holidays.map(h => typeof h === 'string' ? {date:h, name:'國定假日'} : h)
+      : [];
+    const notice = typeof data.notice === 'string' ? data.notice : null;
+    const maxPerDay = Number(data.maxPerDay) > 0 ? Number(data.maxPerDay) : null;
+
+    const proceed = confirm(
+      `確定要匯入這份備份嗎？\n內容：員工 ${employees.length} 位、登記 ${entries.length} 筆、國定假日 ${holidays.length} 天\n` +
+      `匯入是「合併」進現有資料（同員工編號會更新姓名、同日期的假日會更新名稱），不會刪除既有的登記，過程需要一點時間，請耐心等候。`
+    );
+    if(!proceed){ evt.target.value = ''; return; }
+
+    showToast('匯入中，請稍候…');
+    for(const emp of employees){
+      if(emp && emp.empId) await apiCall({action:'addEmployee', empId: emp.empId, name: emp.name || ''});
+    }
+    for(const en of entries){
+      const dates = Array.isArray(en.dates) ? en.dates.join(',') : (en.dates || '');
+      if(dates) await apiCall({action:'addEntry', empId: en.empId || '', name: en.name || '', dates, tentative: en.tentative ? '1' : '0'});
+    }
+    if(holidays.length){
+      const items = holidays.map(h => `${h.date}:${h.name || '國定假日'}`);
+      for(let i=0; i<items.length; i+=25){
+        await apiCall({action:'addHolidays', items: items.slice(i, i+25).join('|')});
+      }
+    }
+    if(notice !== null) await apiCall({action:'setNotice', text: notice});
+    if(maxPerDay !== null) await apiCall({action:'setMaxPerDay', value: maxPerDay});
+
+    await refreshFromServer();
+    renderApp();
+    showToast('匯入完成');
+  }catch(e){
+    showToast('匯入失敗，請確認檔案格式，或稍後再試一次');
+  }
+  evt.target.value = '';
+}
+
+async function handleAddEmployee(evt){
+  evt.preventDefault();
+  const empId = document.getElementById('empIdNew').value.trim();
+  const name = document.getElementById('empNameNew').value.trim();
+  if(!empId || !name){ showToast('請輸入員工編號與姓名'); return false; }
+  const existed = state.employees.some(e=>e.empId===empId);
+  try{
+    await apiCall({action:'addEmployee', empId, name});
+    await refreshFromServer();
+    showToast(existed ? `已更新 ${empId} 的姓名` : `已新增 ${name}（${empId}）`);
+  }catch(e){
+    showToast('更新失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+  }
+  renderApp();
+  return false;
+}
+async function removeEmployee(empId){
+  try{
+    await apiCall({action:'removeEmployee', empId});
+    await refreshFromServer();
+    showToast('已刪除該員工（歷史登記紀錄仍會保留姓名）');
+  }catch(e){
+    showToast('刪除失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+  }
+  renderApp();
+}
+
+async function applyYearHolidays(){
+  const y = document.getElementById('holidayYear').value;
+  const list = YEAR_HOLIDAYS[y];
+  if(!list){ showToast(`目前尚未內建 ${y} 年資料，人事行政總處公告後會再更新，也可以用下方「進階：手動編輯清單」自行輸入`); return; }
+  try{
+    const items = list.map(h => `${h.date}:${h.name}`).join('|');
+    await apiCall({action:'addHolidays', items});
+    await refreshFromServer();
+    showToast(`已帶入 ${y} 年國定假日（共 ${list.length} 天）`);
+  }catch(e){
+    showToast('更新失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+  }
+  renderApp();
+}
+
+async function fetchAndApplyYear(){
+  const year = document.getElementById('holidayYear').value;
+  const btn = document.getElementById('fetchBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '抓取中…'; }
+  try{
+    // Community-maintained, CORS-friendly mirror of the government office calendar
+    // (compiled from official DGPA announcements). The DGPA site itself blocks
+    // automated access, so this is the practical way to fetch data live.
+    const url = `https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('http-'+res.status);
+    const data = await res.json();
+    const list = data.filter(d=>d.isHoliday).map(d=>{
+      const s = String(d.date);
+      return {
+        date: `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`,
+        name: (d.description && d.description.trim()) ? d.description.trim() : '國定假日',
+      };
+    });
+    if(list.length===0) throw new Error('empty');
+    const items = list.map(h => `${h.date}:${h.name}`).join('|');
+    await apiCall({action:'addHolidays', items});
+    await refreshFromServer();
+    showToast(`已自動抓取並帶入 ${year} 年國定假日（共 ${list.length} 天），建議對照官方公告再核對一次`);
+  }catch(e){
+    showToast(`自動抓取失敗——${year} 年資料可能還沒公開，或目前網路連線受限，請改用下方手動輸入`);
+  }
+  renderApp();
+}
+async function removeHoliday(dateStr){
+  const y = parseInt(dateStr.slice(0,4),10);
+  if(y >= new Date().getFullYear()){ showToast('今年與未來年度的資料不提供逐筆刪除'); return; }
+  try{
+    await apiCall({action:'removeHoliday', date: dateStr});
+    await refreshFromServer();
+    showToast(`已刪除 ${dateStr}`);
+  }catch(e){
+    showToast('刪除失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+  }
+  renderApp();
+}
+async function clearHolidays(){
+  if(!confirm('確定要清空整份國定假日清單嗎？')) return;
+  try{
+    await apiCall({action:'clearHolidays'});
+    await refreshFromServer();
+    showToast('已清空國定假日清單');
+  }catch(e){
+    showToast('清空失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+  }
+  renderApp();
+}
+async function saveHolidaysManual(){
+  const raw = document.getElementById('holidayTextarea').value;
+  const lines = raw.split('\n').map(s=>s.trim()).filter(Boolean);
+  const parsed = [];
+  let badCount = 0;
+  lines.forEach(line => {
+    const [datePart, ...nameParts] = line.split(',');
+    const d = (datePart || '').trim();
+    const n = nameParts.join(',').trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(d)){ parsed.push({date: d, name: n || '國定假日'}); }
+    else { badCount++; }
+  });
+  if(badCount > 0){ showToast(`有 ${badCount} 行格式不正確（需為 YYYY-MM-DD,假別名稱），已略過`); }
+  try{
+    await apiCall({action:'clearHolidays'});
+    if(parsed.length){
+      const items = parsed.map(h => `${h.date}:${h.name}`).join('|');
+      await apiCall({action:'addHolidays', items});
+    }
+    await refreshFromServer();
+    showToast('國定假日清單已更新');
+  }catch(e){
+    showToast('更新失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+  }
+  renderApp();
+}
+
+/* ================= STATS VIEW ================= */
+function computeStatsRows(year){
+  const map = {};
+  state.employees.forEach(emp=>{ map[emp.empId] = {empId: emp.empId, name: emp.name, confirmed:0, tentative:0, holiday:0}; });
+  state.entries.forEach(sub=>{
+    // A submission is counted under the year of its START date (not every year it
+    // touches) — e.g. 2026-12-27 ~ 2027-01-10 counts entirely as a 2026 registration.
+    const startYear = parseInt(sub.dates[0].slice(0,4), 10);
+    if(startYear !== year) return;
+    const matched = sub.empId && state.employees.some(e=>e.empId===sub.empId);
+    const key = matched ? sub.empId : ('~' + (sub.name || sub.empId || '未命名'));
+    if(!map[key]) map[key] = {empId: matched ? sub.empId : (sub.empId||''), name: sub.name || '(未命名)', confirmed:0, tentative:0, holiday:0};
+    if(sub.tentative) map[key].tentative += 1;
+    else { map[key].confirmed += 1; if(coversHoliday(sub)) map[key].holiday += 1; }
+  });
+  return Object.values(map).sort((a,b)=> b.confirmed - a.confirmed || (a.empId||'').localeCompare(b.empId||''));
+}
+
+function renderStatsView(){
+  const root = document.getElementById('viewRoot');
+  const year = new Date().getFullYear();
+  const rows = computeStatsRows(year);
+  const totals = rows.reduce((acc,r)=>{ acc.confirmed+=r.confirmed; acc.tentative+=r.tentative; acc.holiday+=r.holiday; return acc; }, {confirmed:0,tentative:0,holiday:0});
+
+  const rowsHtml = rows.length===0 ? `<tr><td colspan="5" style="color:var(--ink-soft);text-align:center;padding:18px 0;">目前 ${year} 年還沒有員工或登記資料</td></tr>` :
+    rows.map(r => `
+      <tr>
+        <td>${escapeHtml(r.empId || '—')}</td>
+        <td>${escapeHtml(r.name)}</td>
+        <td class="num">${r.confirmed}</td>
+        <td class="num">${r.holiday}</td>
+        <td class="num" style="color:var(--ink-soft);">${r.tentative}</td>
+      </tr>
+    `).join('');
+
+  root.innerHTML = `
+    <div class="card">
+      <h2>注意事項／相關規定</h2>
+      <p class="sub">管理者可在此填寫請假相關規定或最新公告，所有同事開啟時都會看到最新版本。</p>
+      <textarea id="noticeTextarea" class="notice-textarea" placeholder="例如：連續假期前後 3 個工作天請提前登記、旺季期間同天上限調整為 2 人…">${escapeHtml(state.notice)}</textarea>
+      <div class="modal-actions" style="margin-top:10px;">
+        <button class="btn-primary" onclick="saveNotice()">儲存</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>登記統計（${year} 年度）</h2>
+      <p class="sub">只計算「開始日期」落在 ${year} 年度的登記——例如 2026/12/27 ~ 2027/01/10 這種跨年度的登記，會整筆算在 2026 年度（以開始日期為準），跨到的國定假日也一併算在這一年；每年會自動重新統計。「已確定登記次數」只算已確定（未刪除、未勾選暫定）的筆數，每一次登記（不論涵蓋幾天）算一次，姓名會依「員工設定」頁面自動更新。</p>
+      <table class="data-table">
+        <thead><tr><th>員工編號</th><th>姓名</th><th>已確定登記次數</th><th>涵蓋國定假日次數</th><th>暫定中（不列入統計）</th></tr></thead>
+        <tbody>
+          ${rowsHtml}
+          ${rows.length ? `<tr class="total-row"><td colspan="2">總計</td><td class="num">${totals.confirmed}</td><td class="num">${totals.holiday}</td><td class="num">${totals.tentative}</td></tr>` : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function saveNotice(){
+  const text = document.getElementById('noticeTextarea').value;
+  try{
+    await apiCall({action:'setNotice', text});
+    state.notice = text;
+    showToast('注意事項已更新');
+  }catch(e){
+    showToast('更新失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+  }
+}
+
+init();
+</script>
+</body>
+</html>
