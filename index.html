@@ -85,7 +85,7 @@
   .day-cell.status-warn{background:var(--warn-bg);}
   .day-cell.status-full{background:var(--full-bg);border-color:var(--full);}
   .overflow-note{font-family:var(--mono);font-size:10px;color:var(--full);font-weight:700;}
-  .name-list{font-size:13px;color:var(--ink-soft);line-height:1.5;overflow:hidden;}
+  .name-list{font-size:14px;font-weight:700;color:var(--ink);line-height:1.4;}
   .name-list .more{color:var(--info);font-weight:600;}
   .name-list .tt{color:var(--warn);}
 
@@ -148,7 +148,7 @@
   .advanced textarea{width:100%;min-height:100px;font:inherit;font-family:var(--mono);font-size:12px;padding:10px;border-radius:8px;border:1px solid var(--line-strong);resize:vertical;}
   .notice-textarea{width:100%;min-height:110px;font:inherit;font-size:13.5px;padding:10px;border-radius:8px;border:1px solid var(--line-strong);resize:vertical;}
 
-  @media (max-width:640px){ .day-cell{min-height:78px;padding:6px;} .name-list{display:none;} h1{font-size:21px;} table.data-table{font-size:12px;} }
+  @media (max-width:640px){ .day-cell{min-height:88px;padding:6px;} h1{font-size:21px;} table.data-table{font-size:12px;} }
 </style>
 </head>
 <body>
@@ -276,7 +276,7 @@ function jsonp(params){
   return new Promise((resolve, reject) => {
     const cbName = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random()*1e6);
     const script = document.createElement('script');
-    const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 15000);
+    const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 30000);
     function cleanup(){
       clearTimeout(timer);
       try{ delete window[cbName]; }catch(e){}
@@ -320,6 +320,13 @@ async function init(){
   try{ state.myEmpId = localStorage.getItem('my-empid') || ''; }catch(e){ state.myEmpId = ''; }
   state.loaded = true;
   renderApp();
+}
+
+async function manualRefresh(){
+  showToast('重新整理中…');
+  const ok = await refreshFromServer();
+  renderApp();
+  showToast(ok ? '已更新為最新資料' : '連不上後端，畫面維持原本的資料');
 }
 
 function subsFor(dateStr){ return state.entries.filter(e => e.dates.includes(dateStr)); }
@@ -405,6 +412,7 @@ function renderCalendarView(){
       </div>
       <div class="toolbar-actions">
         <button class="btn" onclick="goToday()">回到今天</button>
+        <button class="btn" onclick="manualRefresh()">🔄 重新整理資料</button>
         <button class="btn" onclick="openSettings()">登記上限：${state.maxPerDay} 人</button>
       </div>
     </div>
@@ -556,13 +564,14 @@ function handleQuickAdd(evt){
 
 async function finalizeQuickAdd(dates, empId, name, tentative){
   try{
-    await apiCall({action:'addEntry', empId, name, dates: dates.join(','), tentative: tentative ? '1' : '0'});
+    const res = await apiCall({action:'addEntry', empId, name, dates: dates.join(','), tentative: tentative ? '1' : '0'});
+    state.entries.push({ id: res.id, empId, name, dates, tentative: !!tentative, createdAt: new Date().toISOString() });
     state.myEmpId = empId;
     try{ localStorage.setItem('my-empid', empId); }catch(e){}
-    await refreshFromServer();
+    state.backendAvailable = true;
     showToast(`已登記 ${name} — ${fmtRange(dates)}${tentative ? '（暫定）' : ''}`);
   }catch(e){
-    showToast('登記失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+    showToast('登記失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
   }
   renderApp();
 }
@@ -638,10 +647,11 @@ async function removeSubmission(id){
   }
   try{
     await apiCall({action:'deleteEntry', id});
-    await refreshFromServer();
+    state.entries = state.entries.filter(e => e.id !== id);
+    state.backendAvailable = true;
     showToast('已取消這筆登記');
   }catch(e){
-    showToast('取消失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+    showToast('取消失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
   }
   renderPanel(); renderApp();
   document.getElementById('panelOverlay').classList.add('show');
@@ -654,10 +664,11 @@ async function saveSettingsFromModal(){
   if(!v || v < 1){ showToast('請輸入有效的人數'); return; }
   try{
     await apiCall({action:'setMaxPerDay', value: v});
-    await refreshFromServer();
+    state.maxPerDay = v;
+    state.backendAvailable = true;
     showToast(`每日上限已更新為 ${v} 人`);
   }catch(e){
-    showToast('更新失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+    showToast('更新失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
   }
   closeSettings(); renderApp();
 }
@@ -833,13 +844,14 @@ async function handleAddEmployee(evt){
   const empId = document.getElementById('empIdNew').value.trim();
   const name = document.getElementById('empNameNew').value.trim();
   if(!empId || !name){ showToast('請輸入員工編號與姓名'); return false; }
-  const existed = state.employees.some(e=>e.empId===empId);
+  const existing = state.employees.find(e=>e.empId===empId);
   try{
     await apiCall({action:'addEmployee', empId, name});
-    await refreshFromServer();
-    showToast(existed ? `已更新 ${empId} 的姓名` : `已新增 ${name}（${empId}）`);
+    if(existing){ existing.name = name; } else { state.employees.push({empId, name}); }
+    state.backendAvailable = true;
+    showToast(existing ? `已更新 ${empId} 的姓名` : `已新增 ${name}（${empId}）`);
   }catch(e){
-    showToast('更新失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+    showToast('更新失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
   }
   renderApp();
   return false;
@@ -847,12 +859,19 @@ async function handleAddEmployee(evt){
 async function removeEmployee(empId){
   try{
     await apiCall({action:'removeEmployee', empId});
-    await refreshFromServer();
+    state.employees = state.employees.filter(e=>e.empId!==empId);
+    state.backendAvailable = true;
     showToast('已刪除該員工（歷史登記紀錄仍會保留姓名）');
   }catch(e){
-    showToast('刪除失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+    showToast('刪除失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
   }
   renderApp();
+}
+
+function mergeHolidaysLocal(list){
+  const map = new Map(state.holidays.map(h=>[h.date, h.name]));
+  list.forEach(h => map.set(h.date, h.name));
+  state.holidays = [...map.entries()].map(([date,name]) => ({date,name}));
 }
 
 async function applyYearHolidays(){
@@ -862,10 +881,11 @@ async function applyYearHolidays(){
   try{
     const items = list.map(h => `${h.date}:${h.name}`).join('|');
     await apiCall({action:'addHolidays', items});
-    await refreshFromServer();
+    mergeHolidaysLocal(list);
+    state.backendAvailable = true;
     showToast(`已帶入 ${y} 年國定假日（共 ${list.length} 天）`);
   }catch(e){
-    showToast('更新失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+    showToast('更新失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
   }
   renderApp();
 }
@@ -892,7 +912,8 @@ async function fetchAndApplyYear(){
     if(list.length===0) throw new Error('empty');
     const items = list.map(h => `${h.date}:${h.name}`).join('|');
     await apiCall({action:'addHolidays', items});
-    await refreshFromServer();
+    mergeHolidaysLocal(list);
+    state.backendAvailable = true;
     showToast(`已自動抓取並帶入 ${year} 年國定假日（共 ${list.length} 天），建議對照官方公告再核對一次`);
   }catch(e){
     showToast(`自動抓取失敗——${year} 年資料可能還沒公開，或目前網路連線受限，請改用下方手動輸入`);
@@ -904,10 +925,11 @@ async function removeHoliday(dateStr){
   if(y >= new Date().getFullYear()){ showToast('今年與未來年度的資料不提供逐筆刪除'); return; }
   try{
     await apiCall({action:'removeHoliday', date: dateStr});
-    await refreshFromServer();
+    state.holidays = state.holidays.filter(h => h.date !== dateStr);
+    state.backendAvailable = true;
     showToast(`已刪除 ${dateStr}`);
   }catch(e){
-    showToast('刪除失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+    showToast('刪除失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
   }
   renderApp();
 }
@@ -915,10 +937,11 @@ async function clearHolidays(){
   if(!confirm('確定要清空整份國定假日清單嗎？')) return;
   try{
     await apiCall({action:'clearHolidays'});
-    await refreshFromServer();
+    state.holidays = [];
+    state.backendAvailable = true;
     showToast('已清空國定假日清單');
   }catch(e){
-    showToast('清空失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+    showToast('清空失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
   }
   renderApp();
 }
@@ -941,10 +964,11 @@ async function saveHolidaysManual(){
       const items = parsed.map(h => `${h.date}:${h.name}`).join('|');
       await apiCall({action:'addHolidays', items});
     }
-    await refreshFromServer();
+    state.holidays = parsed;
+    state.backendAvailable = true;
     showToast('國定假日清單已更新');
   }catch(e){
-    showToast('更新失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+    showToast('更新失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
   }
   renderApp();
 }
@@ -1013,9 +1037,10 @@ async function saveNotice(){
   try{
     await apiCall({action:'setNotice', text});
     state.notice = text;
+    state.backendAvailable = true;
     showToast('注意事項已更新');
   }catch(e){
-    showToast('更新失敗——無法連線到後端資料庫，請檢查網路連線後再試一次');
+    showToast('更新失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
   }
 }
 
