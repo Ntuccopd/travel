@@ -149,13 +149,12 @@
   details.advanced summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--info);margin-bottom:10px;}
   .advanced textarea{width:100%;min-height:100px;font:inherit;font-family:var(--mono);font-size:12px;padding:10px;border-radius:8px;border:1px solid var(--line-strong);resize:vertical;}
   
-  /* 🎯 格式化編輯器工具列與美化預覽區域樣式 */
   .notice-toolbar{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
   .notice-tool-btn{font:inherit;font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;display:flex;align-items:center;gap:4px;}
   .notice-tool-btn:hover{background:var(--bg);}
   .notice-textarea{width:100%;min-height:180px;font:inherit;font-size:13.5px;line-height:1.6;padding:12px;border-radius:8px;border:1px solid var(--line-strong);resize:vertical;}
   
-  .notice-preview-box{margin-top:14px;padding:16px;background:#FAFAFA;border:1px solid var(--line);border-radius:8px;font-size:14px;line-height:1.7;color:var(--ink);}
+  .notice-preview-box{padding:16px;background:#FAFAFA;border:1px solid var(--line);border-radius:8px;font-size:14px;line-height:1.7;color:var(--ink);}
   .notice-preview-box mark{background:#FEF08A;color:#854D0E;padding:2px 5px;border-radius:4px;font-weight:600;}
   .notice-preview-box .alert-text{color:#DC2626;background:#FEE2E2;padding:2px 6px;border-radius:4px;font-weight:700;}
 
@@ -798,6 +797,37 @@ async function saveSettingsFromModal(){
   }
 }
 
+/* ================= FORMAT HELPER ================= */
+function parseFormattedText(text){
+  let html = escapeHtml(text || '');
+  html = html.replace(/\[b\]([\s\S]*?)\[\/b\]/g, '<b>$1</b>');
+  html = html.replace(/\[hl\]([\s\S]*?)\[\/hl\]/g, '<mark>$1</mark>');
+  html = html.replace(/\[alert\]([\s\S]*?)\[\/alert\]/g, '<span class="alert-text">$1</span>');
+  return html.replace(/\n/g, '<br>');
+}
+
+function insertNoticeTag(tagStart, tagEnd){
+  const textarea = document.getElementById('noticeTextarea');
+  if(!textarea) return;
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const val = textarea.value;
+  const selectedText = val.substring(start, end);
+  const replacement = tagStart + selectedText + tagEnd;
+  textarea.value = val.substring(0, start) + replacement + val.substring(end);
+  textarea.focus();
+  textarea.setSelectionRange(start + tagStart.length, start + tagStart.length + selectedText.length);
+  updateNoticePreview();
+}
+
+function updateNoticePreview(){
+  const textarea = document.getElementById('noticeTextarea');
+  const preview = document.getElementById('noticePreview');
+  if(textarea && preview){
+    preview.innerHTML = parseFormattedText(textarea.value);
+  }
+}
+
 /* ================= EMPLOYEE VIEW ================= */
 function renderEmployeeView(){
   const root = document.getElementById('viewRoot');
@@ -808,8 +838,28 @@ function renderEmployeeView(){
   const startYear = 2027;
   const endYear = Math.max(startYear + 3, nowY + 3);
   const yearOptions = []; for(let y=startYear; y<=endYear; y++) yearOptions.push(String(y));
+  const currentNoticeText = state.notice ? state.notice : DEFAULT_NOTICE;
 
   root.innerHTML = `
+    <div class="card">
+      <h2>注意事項／相關規定編輯</h2>
+      <p class="sub">管理者在此修改與儲存劃假注意事項。選取文字後點擊工具列按鈕可加入<b>粗體</b>、<mark style="background:#FEF08A;color:#854D0E;padding:0 3px;border-radius:3px;">螢光筆劃重點</mark>或<span style="color:#DC2626;background:#FEE2E2;padding:0 3px;border-radius:3px;">紅色警語底色</span>；儲存後所有同事會在「統計頁面」看到排版後的結果。</p>
+      
+      <div class="notice-toolbar">
+        <button type="button" class="notice-tool-btn" onclick="insertNoticeTag('[b]', '[/b]')"><b>B</b> 粗體</button>
+        <button type="button" class="notice-tool-btn" onclick="insertNoticeTag('[hl]', '[/hl]')">🟨 黃色螢光筆</button>
+        <button type="button" class="notice-tool-btn" onclick="insertNoticeTag('[alert]', '[/alert]')">🟥 紅色警語</button>
+      </div>
+
+      <textarea id="noticeTextarea" class="notice-textarea" placeholder="輸入劃假相關規定或公告…" oninput="updateNoticePreview()">${escapeHtml(currentNoticeText)}</textarea>
+      
+      <div id="noticePreview" class="notice-preview-box" style="margin-top:12px;"></div>
+
+      <div class="modal-actions" style="margin-top:12px;">
+        <button class="btn-primary" onclick="saveNotice()">儲存注意事項</button>
+      </div>
+    </div>
+
     <div class="card">
       <h2>員工名冊</h2>
       <p class="sub">設定員工編號與姓名，之後在行事曆登記假別時輸入編號即可自動帶入姓名；統計頁面也會依這裡的姓名自動顯示（修改姓名後，歷史紀錄會一起更新）。</p>
@@ -891,6 +941,8 @@ function renderEmployeeView(){
       </details>
     </div>
   `;
+
+  updateNoticePreview();
 }
 
 function exportBackup(){
@@ -1136,36 +1188,6 @@ async function saveHolidaysManual(){
 }
 
 /* ================= STATS VIEW ================= */
-function parseFormattedText(text){
-  let html = escapeHtml(text || '');
-  html = html.replace(/\[b\]([\s\S]*?)\[\/b\]/g, '<b>$1</b>');
-  html = html.replace(/\[hl\]([\s\S]*?)\[\/hl\]/g, '<mark>$1</mark>');
-  html = html.replace(/\[alert\]([\s\S]*?)\[\/alert\]/g, '<span class="alert-text">$1</span>');
-  return html.replace(/\n/g, '<br>');
-}
-
-function insertNoticeTag(tagStart, tagEnd){
-  const textarea = document.getElementById('noticeTextarea');
-  if(!textarea) return;
-  const start = textarea.selectionStart;
-  const end = textarea.selectionEnd;
-  const val = textarea.value;
-  const selectedText = val.substring(start, end);
-  const replacement = tagStart + selectedText + tagEnd;
-  textarea.value = val.substring(0, start) + replacement + val.substring(end);
-  textarea.focus();
-  textarea.setSelectionRange(start + tagStart.length, start + tagStart.length + selectedText.length);
-  updateNoticePreview();
-}
-
-function updateNoticePreview(){
-  const textarea = document.getElementById('noticeTextarea');
-  const preview = document.getElementById('noticePreview');
-  if(textarea && preview){
-    preview.innerHTML = parseFormattedText(textarea.value);
-  }
-}
-
 function computeStatsRows(year){
   const map = {};
   state.employees.forEach(emp=>{ 
@@ -1207,22 +1229,7 @@ function renderStatsView(){
   root.innerHTML = `
     <div class="card">
       <h2>注意事項／相關規定</h2>
-      <p class="sub">選取文字後點擊工具列按鈕可加入<b>粗體</b>、<mark style="background:#FEF08A;color:#854D0E;padding:0 3px;border-radius:3px;">螢光筆劃重點</mark>或<span style="color:#DC2626;background:#FEE2E2;padding:0 3px;border-radius:3px;">紅色警語底色</span>；儲存後所有同事將看到排版後的預覽效果。</p>
-      
-      <div class="notice-toolbar">
-        <button type="button" class="notice-tool-btn" onclick="insertNoticeTag('[b]', '[/b]')"><b>B</b> 粗體</button>
-        <button type="button" class="notice-tool-btn" onclick="insertNoticeTag('[hl]', '[/hl]')">🟨 黃色螢光筆</button>
-        <button type="button" class="notice-tool-btn" onclick="insertNoticeTag('[alert]', '[/alert]')">🟥 紅色警語</button>
-      </div>
-
-      <textarea id="noticeTextarea" class="notice-textarea" placeholder="輸入劃假相關規定或公告…" oninput="updateNoticePreview()">${escapeHtml(currentNoticeText)}</textarea>
-      
-      <p class="section-label" style="margin-top:16px;">💬 預覽排版效果：</p>
-      <div id="noticePreview" class="notice-preview-box"></div>
-
-      <div class="modal-actions" style="margin-top:12px;">
-        <button class="btn-primary" onclick="saveNotice()">儲存注意事項</button>
-      </div>
+      <div class="notice-preview-box">${parseFormattedText(currentNoticeText)}</div>
     </div>
 
     <div class="card">
@@ -1237,8 +1244,6 @@ function renderStatsView(){
       </table>
     </div>
   `;
-
-  updateNoticePreview();
 }
 
 async function saveNotice(){
