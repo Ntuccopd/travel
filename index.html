@@ -261,11 +261,13 @@ const state = {
   syncingCount: 0
 };
 
-// 強化防護機制：同步中關閉分頁自動攔截
+let isUnlocked = false; // 解鎖鎖定狀態
+
+// 防護機制：同步中關閉分頁自動攔截
 window.addEventListener('beforeunload', (e) => {
   if (state.syncingCount > 0) {
     e.preventDefault();
-    e.returnValue = ''; // 觸發瀏覽器原生的離頁警告彈窗
+    e.returnValue = '';
     return '';
   }
 });
@@ -377,7 +379,6 @@ function holidayName(dateStr){ const h = state.holidays.find(x=>x.date===dateStr
 function isHoliday(dateStr){ return holidayName(dateStr) !== null; }
 function coversHoliday(sub){ return sub.dates.some(isHoliday); }
 
-// 員工編號忽略大小寫比對
 function nameForEmpId(empId){ 
   if(!empId) return null;
   const e = state.employees.find(x => x.empId.trim().toUpperCase() === empId.trim().toUpperCase()); 
@@ -393,7 +394,22 @@ function showToast(msg, duration = 3000){
     showToast._t = setTimeout(()=>t.classList.remove('show'), duration);
   }
 }
-function switchView(v){ state.view = v; renderApp(); }
+
+// 切換分頁（加入方案二：2026 密碼保護）
+function switchView(v){
+  if(v === 'employees' && !isUnlocked){
+    const pwd = prompt("請輸入管理者密碼以解鎖：");
+    if(pwd === "2026"){
+      isUnlocked = true;
+      showToast("🔓 已成功解鎖員工設定");
+    } else {
+      if(pwd !== null) showToast("❌ 密碼錯誤，無法進入員工設定");
+      return;
+    }
+  }
+  state.view = v; 
+  renderApp(); 
+}
 
 function renderApp(){
   const app = document.getElementById('app');
@@ -406,7 +422,7 @@ function renderApp(){
     <div class="tabs">
       <button class="tab-btn ${state.view==='calendar'?'active':''}" onclick="switchView('calendar')">行事曆</button>
       <button class="tab-btn ${state.view==='stats'?'active':''}" onclick="switchView('stats')">統計頁面</button>
-      <button class="tab-btn ${state.view==='employees'?'active':''}" onclick="switchView('employees')">員工設定</button>
+      <button class="tab-btn ${state.view==='employees'?'active':''}" onclick="switchView('employees')">員工設定 🔒</button>
     </div>
     <div id="viewRoot"></div>
   `;
@@ -516,7 +532,6 @@ function handleStartDateChange(){
   }
 }
 
-// 自動帶入姓名（不分大小寫）
 function handleEmpIdInput(){
   const idVal = document.getElementById('qaEmpId').value.trim().toUpperCase();
   const nameInput = document.getElementById('qaName');
@@ -608,7 +623,6 @@ function handleQuickAdd(evt){
   return false;
 }
 
-/* 兩階段狀態提示：同步中與完成 */
 async function finalizeQuickAdd(dates, empId, name, tentative){
   const cleanEmpId = empId.trim().toUpperCase();
   const tempId = 'temp_' + Date.now();
