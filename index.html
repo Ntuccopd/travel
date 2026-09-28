@@ -122,7 +122,6 @@
   .conflict-list li b{font-family:var(--mono);}
   .conflict-list li.full-item{background:var(--full-bg);border-color:#E3B7AC;}
 
-  /* 🎯 Toast 為螢幕中央視窗且加大字體 */
   .toast-container{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;z-index:100;padding:20px;}
   .toast-container.show{display:flex;}
   .toast{background:#111827;color:#ffffff;padding:18px 28px;border-radius:12px;font-size:16px;font-weight:600;max-width:85vw;text-align:center;box-shadow:0 10px 25px rgba(0,0,0,0.3);line-height:1.5;letter-spacing:0.02em;}
@@ -150,8 +149,15 @@
   details.advanced summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--info);margin-bottom:10px;}
   .advanced textarea{width:100%;min-height:100px;font:inherit;font-family:var(--mono);font-size:12px;padding:10px;border-radius:8px;border:1px solid var(--line-strong);resize:vertical;}
   
-  /* 🎯 加大注意事項輸入框高度 */
-  .notice-textarea{width:100%;min-height:220px;font:inherit;font-size:13.5px;line-height:1.6;padding:12px;border-radius:8px;border:1px solid var(--line-strong);resize:vertical;}
+  /* 🎯 格式化編輯器工具列與美化預覽區域樣式 */
+  .notice-toolbar{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+  .notice-tool-btn{font:inherit;font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;display:flex;align-items:center;gap:4px;}
+  .notice-tool-btn:hover{background:var(--bg);}
+  .notice-textarea{width:100%;min-height:180px;font:inherit;font-size:13.5px;line-height:1.6;padding:12px;border-radius:8px;border:1px solid var(--line-strong);resize:vertical;}
+  
+  .notice-preview-box{margin-top:14px;padding:16px;background:#FAFAFA;border:1px solid var(--line);border-radius:8px;font-size:14px;line-height:1.7;color:var(--ink);}
+  .notice-preview-box mark{background:#FEF08A;color:#854D0E;padding:2px 5px;border-radius:4px;font-weight:600;}
+  .notice-preview-box .alert-text{color:#DC2626;background:#FEE2E2;padding:2px 6px;border-radius:4px;font-weight:700;}
 
   @media (max-width:640px){ .day-cell{min-height:88px;padding:6px;} h1{font-size:21px;} table.data-table{font-size:12px;} }
 </style>
@@ -205,17 +211,17 @@ const DEFAULT_NOTICE = `📋 部門劃假與旅遊登記注意事項
 一、 劃假基本規範與次數限制
 • 人數上限：每日最多僅開放 1 人劃假。
 • 年度總次數：每人每年最多登記 7 次（不論假期長短，以登記起始日之年度計算）。
-• 國定假日限制：每人每年僅限 1 次登記涵蓋「國定假日」的旅遊假（計入上述 7 次總額中）。
+• 國定假日限制：每人每年僅限 1 次登記涵蓋[hl]「國定假日」[/hl]的旅遊假（計入上述 7 次總額中）。
 • 春節期間：春節期間暫停劃假，具體停止劃假日期每年另行公告。
-• 劃假表截止：排班人員正式丟出劃假表後，該表涵蓋之日期即全面停止填寫與變更（劃假表單開放後，禁止再登記旅遊）。
+• 劃假表截止：[alert]排班人員正式丟出劃假表後，該表涵蓋之日期即全面停止填寫與變更（劃假表單開放後，禁止再登記旅遊）。[/alert]
 
 二、 開放登記時間與天數門檻
-• 跨年度開放：每年 9 月 1 日起，開放登記下一年度之休假日（務必確定需旅遊或返鄉超過 3 天以上再行登記）。
+• 跨年度開放：每年 9 月 1 日起，開放登記下一年度之休假日（[hl]務必確定需旅遊或返鄉超過 3 天以上再行登記[/hl]）。
 • 國內旅遊/一般劃假：凡連休 3 天以上（包含週六、週日及國定假日，含三天）即需寫入登記表。
 
 三、 出國劃假與優先權規則
 1. 待定狀態寫入：待定出國名單仍可寫入登記表。
-2. 購票優先權：已購買機票者可優先打入「確定出國名單」（請填入機票確實之日期）。
+2. 購票優先權：已購買機票者可優先打入[hl]「確定出國名單」[/hl]（請填入機票確實之日期）。
 3. 待定協調機制：若需購買機票時該日期已有待定，則看大家各自要不要詢問待定者。
 4. 前後搭假與抽籤：出國前後仍可以劃假，但若上班人數不足需一起入抽籤。`;
 
@@ -289,7 +295,6 @@ const state = {
 
 let isUnlocked = false;
 
-// 防護機制：關閉/離頁攔截
 window.addEventListener('beforeunload', (e) => {
   if (state.syncingCount > 0) {
     e.preventDefault();
@@ -441,7 +446,7 @@ function switchView(v){
 function renderApp(){
   const app = document.getElementById('app');
   app.innerHTML = `
-    <p class="eyebrow">休假登記總覽・共用行事曆</p>
+    <p class="eyebrow">登記休假總覽・共用行事曆</p>
     <h1>旅遊登記行事曆</h1>
     <div class="storage-banner ${state.backendAvailable ? '' : 'show'}">
       ⚠️ 目前無法連線到資料庫，請檢查網路連線，或稍後重新整理頁面再試。畫面上顯示的資料可能不是最新版本。
@@ -1131,6 +1136,36 @@ async function saveHolidaysManual(){
 }
 
 /* ================= STATS VIEW ================= */
+function parseFormattedText(text){
+  let html = escapeHtml(text || '');
+  html = html.replace(/\[b\]([\s\S]*?)\[\/b\]/g, '<b>$1</b>');
+  html = html.replace(/\[hl\]([\s\S]*?)\[\/hl\]/g, '<mark>$1</mark>');
+  html = html.replace(/\[alert\]([\s\S]*?)\[\/alert\]/g, '<span class="alert-text">$1</span>');
+  return html.replace(/\n/g, '<br>');
+}
+
+function insertNoticeTag(tagStart, tagEnd){
+  const textarea = document.getElementById('noticeTextarea');
+  if(!textarea) return;
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const val = textarea.value;
+  const selectedText = val.substring(start, end);
+  const replacement = tagStart + selectedText + tagEnd;
+  textarea.value = val.substring(0, start) + replacement + val.substring(end);
+  textarea.focus();
+  textarea.setSelectionRange(start + tagStart.length, start + tagStart.length + selectedText.length);
+  updateNoticePreview();
+}
+
+function updateNoticePreview(){
+  const textarea = document.getElementById('noticeTextarea');
+  const preview = document.getElementById('noticePreview');
+  if(textarea && preview){
+    preview.innerHTML = parseFormattedText(textarea.value);
+  }
+}
+
 function computeStatsRows(year){
   const map = {};
   state.employees.forEach(emp=>{ 
@@ -1172,9 +1207,20 @@ function renderStatsView(){
   root.innerHTML = `
     <div class="card">
       <h2>注意事項／相關規定</h2>
-      <p class="sub">管理者可在此填寫請假相關規定或最新公告，所有同事開啟時都會看到最新版本。</p>
-      <textarea id="noticeTextarea" class="notice-textarea" placeholder="例如：連續假期前後 3 個工作天請提前登記、旺季期間同天上限調整為 2 人…">${escapeHtml(currentNoticeText)}</textarea>
-      <div class="modal-actions" style="margin-top:10px;">
+      <p class="sub">選取文字後點擊工具列按鈕可加入<b>粗體</b>、<mark style="background:#FEF08A;color:#854D0E;padding:0 3px;border-radius:3px;">螢光筆劃重點</mark>或<span style="color:#DC2626;background:#FEE2E2;padding:0 3px;border-radius:3px;">紅色警語底色</span>；儲存後所有同事將看到排版後的預覽效果。</p>
+      
+      <div class="notice-toolbar">
+        <button type="button" class="notice-tool-btn" onclick="insertNoticeTag('[b]', '[/b]')"><b>B</b> 粗體</button>
+        <button type="button" class="notice-tool-btn" onclick="insertNoticeTag('[hl]', '[/hl]')">🟨 黃色螢光筆</button>
+        <button type="button" class="notice-tool-btn" onclick="insertNoticeTag('[alert]', '[/alert]')">🟥 紅色警語</button>
+      </div>
+
+      <textarea id="noticeTextarea" class="notice-textarea" placeholder="輸入劃假相關規定或公告…" oninput="updateNoticePreview()">${escapeHtml(currentNoticeText)}</textarea>
+      
+      <p class="section-label" style="margin-top:16px;">💬 預覽排版效果：</p>
+      <div id="noticePreview" class="notice-preview-box"></div>
+
+      <div class="modal-actions" style="margin-top:12px;">
         <button class="btn-primary" onclick="saveNotice()">儲存注意事項</button>
       </div>
     </div>
@@ -1191,6 +1237,8 @@ function renderStatsView(){
       </table>
     </div>
   `;
+
+  updateNoticePreview();
 }
 
 async function saveNotice(){
