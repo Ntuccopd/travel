@@ -122,7 +122,7 @@
   .conflict-list li b{font-family:var(--mono);}
   .conflict-list li.full-item{background:var(--full-bg);border-color:#E3B7AC;}
 
-  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;z-index:80;max-width:90vw;text-align:center;}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 20px;border-radius:8px;font-size:13.5px;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;z-index:80;max-width:90vw;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.15);}
   .toast.show{opacity:1;transform:translate(-50%,-6px);}
   .loading{padding:60px 0;text-align:center;color:var(--ink-soft);font-size:13px;}
 
@@ -365,10 +365,10 @@ async function init(){
 }
 
 async function manualRefresh(){
-  showToast('重新整理中…');
+  showToast('重新整理中…', 0);
   const ok = await refreshFromServer();
   renderApp();
-  showToast(ok ? '已更新為最新資料' : '連不上後端，畫面維持原本的資料');
+  showToast(ok ? '✅ 已更新為最新資料' : '連不上資料庫，畫面維持原本的資料');
 }
 
 function subsFor(dateStr){ return state.entries.filter(e => e.dates.includes(dateStr)); }
@@ -385,11 +385,13 @@ function nameForEmpId(empId){
 }
 function displayName(sub){ return (sub.empId && nameForEmpId(sub.empId)) || sub.name || '(未命名)'; }
 
-function showToast(msg){
+function showToast(msg, duration = 3000){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   clearTimeout(showToast._t);
-  showToast._t = setTimeout(()=>t.classList.remove('show'), 2800);
+  if (duration > 0) {
+    showToast._t = setTimeout(()=>t.classList.remove('show'), duration);
+  }
 }
 function switchView(v){ state.view = v; renderApp(); }
 
@@ -399,7 +401,7 @@ function renderApp(){
     <p class="eyebrow">部門休假總覽・共用行事曆</p>
     <h1>假別登記行事曆</h1>
     <div class="storage-banner ${state.backendAvailable ? '' : 'show'}">
-      ⚠️ 目前無法連線到後端資料庫（Google Sheet），請檢查網路連線，或稍後重新整理頁面再試。畫面上顯示的資料可能不是最新版本。
+      ⚠️ 目前無法連線到資料庫，請檢查網路連線，或稍後重新整理頁面再試。畫面上顯示的資料可能不是最新版本。
     </div>
     <div class="tabs">
       <button class="tab-btn ${state.view==='calendar'?'active':''}" onclick="switchView('calendar')">行事曆</button>
@@ -606,7 +608,7 @@ function handleQuickAdd(evt){
   return false;
 }
 
-/* 樂觀更新：寫入時將員工編號統一轉成大寫 */
+/* 兩階段狀態提示：同步中與完成 */
 async function finalizeQuickAdd(dates, empId, name, tentative){
   const cleanEmpId = empId.trim().toUpperCase();
   const tempId = 'temp_' + Date.now();
@@ -617,18 +619,19 @@ async function finalizeQuickAdd(dates, empId, name, tentative){
   try{ localStorage.setItem('my-empid', cleanEmpId); }catch(e){}
   saveLocalCache();
   renderApp();
-  showToast(`已登記 ${name} — ${fmtRange(dates)}${tentative ? '（暫定）' : ''} (同步中...)`);
+  showToast(`⏳ 資料同步中，請稍候…`, 0);
 
   try{
     const res = await apiCall({action:'addEntry', empId: cleanEmpId, name, dates: dates.join(','), tentative: tentative ? '1' : '0'});
     newEntry.id = res.id;
     saveLocalCache();
     state.backendAvailable = true;
+    showToast(`✅ 資料已成功同步更新！`, 3500);
   }catch(e){
     state.entries = state.entries.filter(e => e.id !== tempId);
     saveLocalCache();
     renderApp();
-    showToast('登記失敗——連不上後端，已還原變更');
+    showToast('❌ 登記失敗——連不上伺服器，已還原變更', 4000);
   }
 }
 
@@ -708,17 +711,18 @@ async function removeSubmission(id){
   renderPanel(); 
   renderApp();
   document.getElementById('panelOverlay').classList.add('show');
-  showToast('已取消登記 (背景同步中...)');
+  showToast('⏳ 取消登記同步中，請稍候…', 0);
 
   try{
     await apiCall({action:'deleteEntry', id});
     state.backendAvailable = true;
+    showToast('✅ 已成功取消並同步更新！', 3500);
   }catch(e){
     state.entries = originalEntries;
     saveLocalCache();
     renderPanel();
     renderApp();
-    showToast('取消失敗——連不上後端，已還原變更');
+    showToast('❌ 取消失敗——連不上伺服器，已還原變更', 4000);
   }
 }
 
@@ -734,16 +738,17 @@ async function saveSettingsFromModal(){
   saveLocalCache();
   closeSettings(); 
   renderApp();
-  showToast(`每日上限已更新為 ${v} 人 (背景同步中...)`);
+  showToast('⏳ 設定同步中，請稍候…', 0);
 
   try{
     await apiCall({action:'setMaxPerDay', value: v});
     state.backendAvailable = true;
+    showToast('✅ 每日上限已成功同步更新！', 3500);
   }catch(e){
     state.maxPerDay = prevMax;
     saveLocalCache();
     renderApp();
-    showToast('更新失敗——連不上後端，已還原人數上限');
+    showToast('❌ 更新失敗——連不上伺服器，已還原人數上限', 4000);
   }
 }
 
@@ -786,7 +791,7 @@ function renderEmployeeView(){
 
     <div class="card">
       <h2>資料備份與還原</h2>
-      <p class="sub">把目前所有資料（員工名冊、休假登記、國定假日清單、注意事項、每日上限）打包下載成一個檔案；日後如果需要換一份新版本的工具（例如重新發布產生新連結），可以用這個檔案把資料一次還原回來，不用重新一筆一筆輸入。</p>
+      <p class="sub">把目前所有資料（員工名冊、休假登記、國定假日清單、注意事項、每日上限）打包下載成一個檔案；日後如果需要換一份新版本的工具，可以用這個檔案把資料一次還原回來，不用重新一筆一筆輸入。</p>
       <div class="modal-actions" style="justify-content:flex-start;margin-top:0;">
         <button class="btn-primary" onclick="exportBackup()">匯出備份（下載檔案）</button>
         <button class="btn" onclick="document.getElementById('importFileInput').click()">匯入備份（選擇檔案）</button>
@@ -887,7 +892,7 @@ async function handleImportFile(evt){
     );
     if(!proceed){ evt.target.value = ''; return; }
 
-    showToast('匯入中，請稍候…');
+    showToast('⏳ 匯入中，請稍候…', 0);
     for(const emp of employees){
       if(emp && emp.empId) await apiCall({action:'addEmployee', empId: emp.empId, name: emp.name || ''});
     }
@@ -906,14 +911,13 @@ async function handleImportFile(evt){
 
     await refreshFromServer();
     renderApp();
-    showToast('匯入完成');
+    showToast('✅ 已成功匯入並同步更新！', 3500);
   }catch(e){
-    showToast('匯入失敗，請確認檔案格式，或稍後再試一次');
+    showToast('❌ 匯入失敗，請確認檔案格式，或稍後再試一次', 4000);
   }
   evt.target.value = '';
 }
 
-/* 員工編號統一存成大寫 */
 async function handleAddEmployee(evt){
   evt.preventDefault();
   const empIdRaw = document.getElementById('empIdNew').value.trim();
@@ -931,11 +935,12 @@ async function handleAddEmployee(evt){
   }
   saveLocalCache();
   renderApp();
-  showToast(oldEmp ? `已更新 ${empId} 的姓名 (背景同步中...)` : `已新增 ${name}（${empId}） (背景同步中...)`);
+  showToast('⏳ 員工資料同步中，請稍候…', 0);
 
   try{
     await apiCall({action:'addEmployee', empId, name});
     state.backendAvailable = true;
+    showToast('✅ 員工資料已成功同步更新！', 3500);
   }catch(e){
     if(oldEmp){
       state.employees[existingIndex] = oldEmp;
@@ -944,28 +949,28 @@ async function handleAddEmployee(evt){
     }
     saveLocalCache();
     renderApp();
-    showToast('新增／更新失敗——連不上後端，已還原變更');
+    showToast('❌ 新增／更新失敗——連不上伺服器，已還原變更', 4000);
   }
   return false;
 }
 
-/* 刪除員工（比對大寫） */
 async function removeEmployee(empIdRaw){
   const empId = empIdRaw.trim().toUpperCase();
   const originalEmp = [...state.employees];
   state.employees = state.employees.filter(e => e.empId.trim().toUpperCase() !== empId);
   saveLocalCache();
   renderApp();
-  showToast('已刪除該員工 (背景同步中...)');
+  showToast('⏳ 刪除同步中，請稍候…', 0);
 
   try{
     await apiCall({action:'removeEmployee', empId});
     state.backendAvailable = true;
+    showToast('✅ 已刪除並同步更新！', 3500);
   }catch(e){
     state.employees = originalEmp;
     saveLocalCache();
     renderApp();
-    showToast('刪除失敗——連不上後端，已還原該員工');
+    showToast('❌ 刪除失敗——連不上伺服器，已還原該員工', 4000);
   }
 }
 
@@ -979,15 +984,16 @@ async function applyYearHolidays(){
   const y = document.getElementById('holidayYear').value;
   const list = YEAR_HOLIDAYS[y];
   if(!list){ showToast(`目前尚未內建 ${y} 年資料，人事行政總處公告後會再更新，也可以用下方「進階：手動編輯清單」自行輸入`); return; }
+  showToast('⏳ 假日資料同步中，請稍候…', 0);
   try{
     const items = list.map(h => `${h.date}:${h.name}`).join('|');
     await apiCall({action:'addHolidays', items});
     mergeHolidaysLocal(list);
     saveLocalCache();
     state.backendAvailable = true;
-    showToast(`已帶入 ${y} 年國定假日（共 ${list.length} 天）`);
+    showToast(`✅ 已成功帶入 ${y} 年國定假日並同步更新！`, 3500);
   }catch(e){
-    showToast('更新失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
+    showToast('❌ 更新失敗——連不上伺服器，請稍等一下再試一次', 4000);
   }
   renderApp();
 }
@@ -996,6 +1002,7 @@ async function fetchAndApplyYear(){
   const year = document.getElementById('holidayYear').value;
   const btn = document.getElementById('fetchBtn');
   if(btn){ btn.disabled = true; btn.textContent = '抓取中…'; }
+  showToast('⏳ 抓取並同步資料中，請稍候…', 0);
   try{
     const url = `https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`;
     const res = await fetch(url);
@@ -1014,9 +1021,9 @@ async function fetchAndApplyYear(){
     mergeHolidaysLocal(list);
     saveLocalCache();
     state.backendAvailable = true;
-    showToast(`已自動抓取並帶入 ${year} 年國定假日（共 ${list.length} 天），建議對照官方公告再核對一次`);
+    showToast(`✅ 已自動抓取並成功同步 ${year} 年國定假日！`, 3500);
   }catch(e){
-    showToast(`自動抓取失敗——${year} 年資料可能還沒公開，或目前網路連線受限，請改用下方手動輸入`);
+    showToast(`❌ 自動抓取失敗——${year} 年資料可能還沒公開，或網路受限`, 4000);
   }
   renderApp();
 }
@@ -1024,28 +1031,30 @@ async function fetchAndApplyYear(){
 async function removeHoliday(dateStr){
   const y = parseInt(dateStr.slice(0,4),10);
   if(y >= new Date().getFullYear()){ showToast('今年與未來年度的資料不提供逐筆刪除'); return; }
+  showToast('⏳ 刪除同步中，請稍候…', 0);
   try{
     await apiCall({action:'removeHoliday', date: dateStr});
     state.holidays = state.holidays.filter(h => h.date !== dateStr);
     saveLocalCache();
     state.backendAvailable = true;
-    showToast(`已刪除 ${dateStr}`);
+    showToast(`✅ 已成功刪除 ${dateStr} 並同步更新！`, 3500);
   }catch(e){
-    showToast('刪除失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
+    showToast('❌ 刪除失敗——連不上伺服器，請稍等一下再試一次', 4000);
   }
   renderApp();
 }
 
 async function clearHolidays(){
   if(!confirm('確定要清空整份國定假日清單嗎？')) return;
+  showToast('⏳ 清空同步中，請稍候…', 0);
   try{
     await apiCall({action:'clearHolidays'});
     state.holidays = [];
     saveLocalCache();
     state.backendAvailable = true;
-    showToast('已清空國定假日清單');
+    showToast('✅ 已成功清空國定假日清單！', 3500);
   }catch(e){
-    showToast('清空失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
+    showToast('❌ 清空失敗——連不上伺服器，請稍等一下再試一次', 4000);
   }
   renderApp();
 }
@@ -1062,7 +1071,8 @@ async function saveHolidaysManual(){
     if(/^\d{4}-\d{2}-\d{2}$/.test(d)){ parsed.push({date: d, name: n || '國定假日'}); }
     else { badCount++; }
   });
-  if(badCount > 0){ showToast(`有 ${badCount} 行格式不正確（需為 YYYY-MM-DD,假別名稱），已略過`); }
+  if(badCount > 0){ showToast(`有 ${badCount} 行格式不正確，已略過`); }
+  showToast('⏳ 清單同步中，請稍候…', 0);
   try{
     await apiCall({action:'clearHolidays'});
     if(parsed.length){
@@ -1072,9 +1082,9 @@ async function saveHolidaysManual(){
     state.holidays = parsed;
     saveLocalCache();
     state.backendAvailable = true;
-    showToast('國定假日清單已更新');
+    showToast('✅ 國定假日清單已成功更新並同步！', 3500);
   }catch(e){
-    showToast('更新失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
+    showToast('❌ 更新失敗——連不上伺服器，請稍等一下再試一次', 4000);
   }
   renderApp();
 }
@@ -1145,16 +1155,17 @@ async function saveNotice(){
   const oldNotice = state.notice;
   state.notice = text;
   saveLocalCache();
-  showToast('注意事項已更新 (背景同步中...)');
+  showToast('⏳ 公告同步中，請稍候…', 0);
 
   try{
     await apiCall({action:'setNotice', text});
     state.backendAvailable = true;
+    showToast('✅ 注意事項已成功更新並同步！', 3500);
   }catch(e){
     state.notice = oldNotice;
     saveLocalCache();
     renderApp();
-    showToast('更新失敗——連不上後端，已還原公告');
+    showToast('❌ 更新失敗——連不上伺服器，已還原公告', 4000);
   }
 }
 
