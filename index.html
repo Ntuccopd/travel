@@ -258,15 +258,15 @@ const state = {
   backendAvailable: true,
   pendingSubmit: null,
   view: 'calendar',
-  syncingCount: 0 // 記錄正在寫入 Google Sheet 的請求數量
+  syncingCount: 0
 };
 
-// 防護機制：背景正在同步時，阻止使用者誤關網頁
+// 強化防護機制：同步中關閉分頁自動攔截
 window.addEventListener('beforeunload', (e) => {
   if (state.syncingCount > 0) {
     e.preventDefault();
-    e.returnValue = '資料正在同步儲存至 Google Sheet 中，確定要離開嗎？';
-    return e.returnValue;
+    e.returnValue = ''; // 觸發瀏覽器原生的離頁警告彈窗
+    return '';
   }
 });
 
@@ -376,7 +376,13 @@ function statusFor(count){ if(count >= state.maxPerDay) return 'full'; if(count 
 function holidayName(dateStr){ const h = state.holidays.find(x=>x.date===dateStr); return h ? h.name : null; }
 function isHoliday(dateStr){ return holidayName(dateStr) !== null; }
 function coversHoliday(sub){ return sub.dates.some(isHoliday); }
-function nameForEmpId(empId){ const e = state.employees.find(x=>x.empId===empId); return e ? e.name : null; }
+
+// 員工編號忽略大小寫比對
+function nameForEmpId(empId){ 
+  if(!empId) return null;
+  const e = state.employees.find(x => x.empId.trim().toUpperCase() === empId.trim().toUpperCase()); 
+  return e ? e.name : null; 
+}
 function displayName(sub){ return (sub.empId && nameForEmpId(sub.empId)) || sub.name || '(未命名)'; }
 
 function showToast(msg){
@@ -508,10 +514,11 @@ function handleStartDateChange(){
   }
 }
 
+// 自動帶入姓名（不分大小寫）
 function handleEmpIdInput(){
-  const idVal = document.getElementById('qaEmpId').value.trim();
+  const idVal = document.getElementById('qaEmpId').value.trim().toUpperCase();
   const nameInput = document.getElementById('qaName');
-  const match = state.employees.find(e=>e.empId===idVal);
+  const match = state.employees.find(e => e.empId.trim().toUpperCase() === idVal);
   if(match){
     nameInput.value = match.name;
     nameInput.readOnly = true;
@@ -599,31 +606,29 @@ function handleQuickAdd(evt){
   return false;
 }
 
-/* 樂觀更新：立刻寫入前端並渲染，背景非同步寫入 GAS */
+/* 樂觀更新：寫入時將員工編號統一轉成大寫 */
 async function finalizeQuickAdd(dates, empId, name, tentative){
+  const cleanEmpId = empId.trim().toUpperCase();
   const tempId = 'temp_' + Date.now();
-  const newEntry = { id: tempId, empId, name, dates, tentative: !!tentative, createdAt: new Date().toISOString() };
+  const newEntry = { id: tempId, empId: cleanEmpId, name, dates, tentative: !!tentative, createdAt: new Date().toISOString() };
   
-  // 1. 畫面優先更新 (0秒延遲)
   state.entries.push(newEntry);
-  state.myEmpId = empId;
-  try{ localStorage.setItem('my-empid', empId); }catch(e){}
+  state.myEmpId = cleanEmpId;
+  try{ localStorage.setItem('my-empid', cleanEmpId); }catch(e){}
   saveLocalCache();
   renderApp();
   showToast(`已登記 ${name} — ${fmtRange(dates)}${tentative ? '（暫定）' : ''} (同步中...)`);
 
-  // 2. 背景非同步寫入 Google Sheet
   try{
-    const res = await apiCall({action:'addEntry', empId, name, dates: dates.join(','), tentative: tentative ? '1' : '0'});
-    newEntry.id = res.id; // 背景替換為正式 ID
+    const res = await apiCall({action:'addEntry', empId: cleanEmpId, name, dates: dates.join(','), tentative: tentative ? '1' : '0'});
+    newEntry.id = res.id;
     saveLocalCache();
     state.backendAvailable = true;
   }catch(e){
-    // 出錯時復原
     state.entries = state.entries.filter(e => e.id !== tempId);
     saveLocalCache();
     renderApp();
-    showToast('登記失敗——後端連線逾時，已還原變更');
+    showToast('登記失敗——連不上後端，已還原變更');
   }
 }
 
@@ -690,7 +695,6 @@ function renderPanel(){
   `;
 }
 
-/* 樂觀更新：刪除卡片 */
 async function removeSubmission(id){
   const sub = state.entries.find(e => e.id === id);
   if(sub && isPastSubmission(sub)){
@@ -698,7 +702,6 @@ async function removeSubmission(id){
     return;
   }
   
-  // 1. 先從前端暫存刪除，秒更新畫面
   const originalEntries = [...state.entries];
   state.entries = state.entries.filter(e => e.id !== id);
   saveLocalCache();
@@ -707,12 +710,10 @@ async function removeSubmission(id){
   document.getElementById('panelOverlay').classList.add('show');
   showToast('已取消登記 (背景同步中...)');
 
-  // 2. 背景非同步刪除
   try{
     await apiCall({action:'deleteEntry', id});
     state.backendAvailable = true;
   }catch(e){
-    // 出錯時還原
     state.entries = originalEntries;
     saveLocalCache();
     renderPanel();
@@ -724,7 +725,6 @@ async function removeSubmission(id){
 function openSettings(){ document.getElementById('maxInput').value = state.maxPerDay; document.getElementById('settingsOverlay').classList.add('show'); }
 function closeSettings(){ document.getElementById('settingsOverlay').classList.remove('show'); }
 
-/* 樂觀更新：變更上限人次 */
 async function saveSettingsFromModal(){
   const v = parseInt(document.getElementById('maxInput').value, 10);
   if(!v || v < 1){ showToast('請輸入有效的人數'); return; }
@@ -913,14 +913,15 @@ async function handleImportFile(evt){
   evt.target.value = '';
 }
 
-/* 樂觀更新：新增員工 */
+/* 員工編號統一存成大寫 */
 async function handleAddEmployee(evt){
   evt.preventDefault();
-  const empId = document.getElementById('empIdNew').value.trim();
+  const empIdRaw = document.getElementById('empIdNew').value.trim();
   const name = document.getElementById('empNameNew').value.trim();
-  if(!empId || !name){ showToast('請輸入員工編號與姓名'); return false; }
+  if(!empIdRaw || !name){ showToast('請輸入員工編號與姓名'); return false; }
   
-  const existingIndex = state.employees.findIndex(e=>e.empId===empId);
+  const empId = empIdRaw.toUpperCase();
+  const existingIndex = state.employees.findIndex(e => e.empId.trim().toUpperCase() === empId);
   const oldEmp = existingIndex >= 0 ? {...state.employees[existingIndex]} : null;
   
   if(existingIndex >= 0){
@@ -948,10 +949,11 @@ async function handleAddEmployee(evt){
   return false;
 }
 
-/* 樂觀更新：刪除員工 */
-async function removeEmployee(empId){
+/* 刪除員工（比對大寫） */
+async function removeEmployee(empIdRaw){
+  const empId = empIdRaw.trim().toUpperCase();
   const originalEmp = [...state.employees];
-  state.employees = state.employees.filter(e=>e.empId!==empId);
+  state.employees = state.employees.filter(e => e.empId.trim().toUpperCase() !== empId);
   saveLocalCache();
   renderApp();
   showToast('已刪除該員工 (背景同步中...)');
@@ -1080,13 +1082,17 @@ async function saveHolidaysManual(){
 /* ================= STATS VIEW ================= */
 function computeStatsRows(year){
   const map = {};
-  state.employees.forEach(emp=>{ map[emp.empId] = {empId: emp.empId, name: emp.name, confirmed:0, tentative:0, holiday:0}; });
+  state.employees.forEach(emp=>{ 
+    const key = emp.empId.trim().toUpperCase();
+    map[key] = {empId: emp.empId.toUpperCase(), name: emp.name, confirmed:0, tentative:0, holiday:0}; 
+  });
   state.entries.forEach(sub=>{
     const startYear = parseInt(sub.dates[0].slice(0,4), 10);
     if(startYear !== year) return;
-    const matched = sub.empId && state.employees.some(e=>e.empId===sub.empId);
-    const key = matched ? sub.empId : ('~' + (sub.name || sub.empId || '未命名'));
-    if(!map[key]) map[key] = {empId: matched ? sub.empId : (sub.empId||''), name: sub.name || '(未命名)', confirmed:0, tentative:0, holiday:0};
+    const subEmpUpper = sub.empId ? sub.empId.trim().toUpperCase() : '';
+    const matched = subEmpUpper && state.employees.some(e=>e.empId.trim().toUpperCase()===subEmpUpper);
+    const key = matched ? subEmpUpper : ('~' + (sub.name || subEmpUpper || '未命名'));
+    if(!map[key]) map[key] = {empId: matched ? subEmpUpper : (subEmpUpper||''), name: sub.name || '(未命名)', confirmed:0, tentative:0, holiday:0};
     if(sub.tentative) map[key].tentative += 1;
     else { map[key].confirmed += 1; if(coversHoliday(sub)) map[key].holiday += 1; }
   });
@@ -1134,7 +1140,6 @@ function renderStatsView(){
   `;
 }
 
-/* 樂觀更新：公告事項 */
 async function saveNotice(){
   const text = document.getElementById('noticeTextarea').value;
   const oldNotice = state.notice;
