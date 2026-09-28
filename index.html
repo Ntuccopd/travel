@@ -193,8 +193,6 @@
 const WEEKDAYS = ['日','一','二','三','四','五','六'];
 const MIN_DAYS = 3;
 
-/* 資料整理自行政院人事行政總處歷年公告的政府行政機關辦公日曆表，僅供參考；
-   如遇官方後續修正或補假規則調整，仍以人事行政總處正式公告為準。 */
 const YEAR_HOLIDAYS = {
   2026: [
     {date:'2026-01-01', name:'元旦'},
@@ -241,8 +239,7 @@ const YEAR_HOLIDAYS = {
     {date:'2027-12-31', name:'元旦補假（117年）'},
   ],
 };
-// All built-in years merged (deduped by date) — used as a fallback default only if
-// the backend can't be reached at all (e.g. first load with no network).
+
 const ALL_BUILTIN_HOLIDAYS = (() => {
   const map = new Map();
   Object.values(YEAR_HOLIDAYS).flat().forEach(h => map.set(h.date, h.name));
@@ -250,8 +247,8 @@ const ALL_BUILTIN_HOLIDAYS = (() => {
 })();
 
 const state = {
-  entries: [],      // {id, empId, name, dates:[iso...], tentative:bool, createdAt}
-  employees: [],    // {empId, name}
+  entries: [],      
+  employees: [],    
   holidays: [],
   notice: '',
   maxPerDay: 3,
@@ -261,7 +258,44 @@ const state = {
   backendAvailable: true,
   pendingSubmit: null,
   view: 'calendar',
+  syncingCount: 0 // 記錄正在寫入 Google Sheet 的請求數量
 };
+
+// 防護機制：背景正在同步時，阻止使用者誤關網頁
+window.addEventListener('beforeunload', (e) => {
+  if (state.syncingCount > 0) {
+    e.preventDefault();
+    e.returnValue = '資料正在同步儲存至 Google Sheet 中，確定要離開嗎？';
+    return e.returnValue;
+  }
+});
+
+function saveLocalCache(){
+  try {
+    const cacheData = {
+      entries: state.entries,
+      employees: state.employees,
+      holidays: state.holidays,
+      notice: state.notice,
+      maxPerDay: state.maxPerDay
+    };
+    localStorage.setItem('leave_cal_cache', JSON.stringify(cacheData));
+  } catch(e){}
+}
+
+function loadLocalCache(){
+  try {
+    const raw = localStorage.getItem('leave_cal_cache');
+    if(raw){
+      const data = JSON.parse(raw);
+      state.entries = data.entries || [];
+      state.employees = data.employees || [];
+      state.holidays = data.holidays || [];
+      state.notice = data.notice || '';
+      state.maxPerDay = data.maxPerDay || 3;
+    }
+  } catch(e){}
+}
 
 function pad(n){ return String(n).padStart(2,'0'); }
 function toISO(y,m,d){ return `${y}-${pad(m+1)}-${pad(d)}`; }
@@ -269,7 +303,6 @@ function todayISO(){ const t=new Date(); return toISO(t.getFullYear(), t.getMont
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtRange(dates){ return dates.length===1 ? dates[0] : `${dates[0]} ~ ${dates[dates.length-1]}`; }
 
-/* ============ Backend (Google Apps Script) — JSONP only, no CORS involved ============ */
 const EXEC_URL = 'https://script.google.com/macros/s/AKfycbz77tKex7VF3Vt095CxWLZ493UzO77QoVSr5oC0MSjzr2Q1UdbROLSobb6r3AiZp7iB/exec';
 
 function jsonp(params){
@@ -293,9 +326,14 @@ function jsonp(params){
 }
 
 async function apiCall(params){
-  const data = await jsonp(params);
-  if(!data || data.ok === false) throw new Error((data && data.error) || 'backend error');
-  return data;
+  state.syncingCount++;
+  try {
+    const data = await jsonp(params);
+    if(!data || data.ok === false) throw new Error((data && data.error) || 'backend error');
+    return data;
+  } finally {
+    state.syncingCount = Math.max(0, state.syncingCount - 1);
+  }
 }
 
 async function refreshFromServer(){
@@ -307,6 +345,7 @@ async function refreshFromServer(){
     state.notice = data.notice || '';
     state.maxPerDay = Number(data.maxPerDay) || 3;
     state.backendAvailable = true;
+    saveLocalCache();
     return true;
   }catch(e){
     state.backendAvailable = false;
@@ -315,10 +354,13 @@ async function refreshFromServer(){
 }
 
 async function init(){
-  const ok = await refreshFromServer();
-  if(!ok && state.holidays.length === 0){ state.holidays = [...ALL_BUILTIN_HOLIDAYS]; }
+  loadLocalCache();
   try{ state.myEmpId = localStorage.getItem('my-empid') || ''; }catch(e){ state.myEmpId = ''; }
   state.loaded = true;
+  renderApp(); 
+
+  const ok = await refreshFromServer();
+  if(!ok && state.holidays.length === 0){ state.holidays = [...ALL_BUILTIN_HOLIDAYS]; }
   renderApp();
 }
 
@@ -446,9 +488,6 @@ function handleStartDateChange(){
   const startVal = document.getElementById('qaStart').value;
   if(!startVal) return;
   const endInput = document.getElementById('qaEnd');
-  // keep whatever length of stay was already chosen, but always shift the end date to
-  // land after the new start date — avoids re-dragging the end-date picker forward
-  // by hand when the start date is months away.
   const prevStart = endInput.dataset.forStart;
   const prevEnd = endInput.value;
   let spanDays = MIN_DAYS - 1;
@@ -462,10 +501,8 @@ function handleStartDateChange(){
   endInput.value = toISO(end.getFullYear(), end.getMonth(), end.getDate());
   endInput.dataset.forStart = startVal;
 
-  // pop the end-date picker open right away so the person can see/adjust it
-  // instead of having to click into the field separately.
   if(typeof endInput.showPicker === 'function'){
-    try{ endInput.focus(); endInput.showPicker(); }catch(e){ /* not supported in this browser, ignore */ }
+    try{ endInput.focus(); endInput.showPicker(); }catch(e){}
   }else{
     endInput.focus();
   }
@@ -562,23 +599,37 @@ function handleQuickAdd(evt){
   return false;
 }
 
+/* 樂觀更新：立刻寫入前端並渲染，背景非同步寫入 GAS */
 async function finalizeQuickAdd(dates, empId, name, tentative){
+  const tempId = 'temp_' + Date.now();
+  const newEntry = { id: tempId, empId, name, dates, tentative: !!tentative, createdAt: new Date().toISOString() };
+  
+  // 1. 畫面優先更新 (0秒延遲)
+  state.entries.push(newEntry);
+  state.myEmpId = empId;
+  try{ localStorage.setItem('my-empid', empId); }catch(e){}
+  saveLocalCache();
+  renderApp();
+  showToast(`已登記 ${name} — ${fmtRange(dates)}${tentative ? '（暫定）' : ''} (同步中...)`);
+
+  // 2. 背景非同步寫入 Google Sheet
   try{
     const res = await apiCall({action:'addEntry', empId, name, dates: dates.join(','), tentative: tentative ? '1' : '0'});
-    state.entries.push({ id: res.id, empId, name, dates, tentative: !!tentative, createdAt: new Date().toISOString() });
-    state.myEmpId = empId;
-    try{ localStorage.setItem('my-empid', empId); }catch(e){}
+    newEntry.id = res.id; // 背景替換為正式 ID
+    saveLocalCache();
     state.backendAvailable = true;
-    showToast(`已登記 ${name} — ${fmtRange(dates)}${tentative ? '（暫定）' : ''}`);
   }catch(e){
-    showToast('登記失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
+    // 出錯時復原
+    state.entries = state.entries.filter(e => e.id !== tempId);
+    saveLocalCache();
+    renderApp();
+    showToast('登記失敗——後端連線逾時，已還原變更');
   }
-  renderApp();
 }
 
 function showConflictModal(conflicts){
   document.getElementById('conflictList').innerHTML = conflicts.map(c => `
-    <li class="${c.willBeFull ? 'full-item' : ''}"><b>${c.date}</b>　已有：${c.names.map(escapeHtml).join('、')}${c.willBeFull ? '（登記後將達上限）' : ''}</li>
+    <li class="${c.willBeFull ? 'full-item' : ''}"><b>${c.date}</b> 已有：${c.names.map(escapeHtml).join('、')}${c.willBeFull ? '（登記後將達上限）' : ''}</li>
   `).join('');
   document.getElementById('conflictOverlay').classList.add('show');
 }
@@ -639,38 +690,61 @@ function renderPanel(){
   `;
 }
 
+/* 樂觀更新：刪除卡片 */
 async function removeSubmission(id){
   const sub = state.entries.find(e => e.id === id);
   if(sub && isPastSubmission(sub)){
     showToast('日期已過的登記無法刪除，以維持紀錄完整性');
     return;
   }
+  
+  // 1. 先從前端暫存刪除，秒更新畫面
+  const originalEntries = [...state.entries];
+  state.entries = state.entries.filter(e => e.id !== id);
+  saveLocalCache();
+  renderPanel(); 
+  renderApp();
+  document.getElementById('panelOverlay').classList.add('show');
+  showToast('已取消登記 (背景同步中...)');
+
+  // 2. 背景非同步刪除
   try{
     await apiCall({action:'deleteEntry', id});
-    state.entries = state.entries.filter(e => e.id !== id);
     state.backendAvailable = true;
-    showToast('已取消這筆登記');
   }catch(e){
-    showToast('取消失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
+    // 出錯時還原
+    state.entries = originalEntries;
+    saveLocalCache();
+    renderPanel();
+    renderApp();
+    showToast('取消失敗——連不上後端，已還原變更');
   }
-  renderPanel(); renderApp();
-  document.getElementById('panelOverlay').classList.add('show');
 }
 
 function openSettings(){ document.getElementById('maxInput').value = state.maxPerDay; document.getElementById('settingsOverlay').classList.add('show'); }
 function closeSettings(){ document.getElementById('settingsOverlay').classList.remove('show'); }
+
+/* 樂觀更新：變更上限人次 */
 async function saveSettingsFromModal(){
   const v = parseInt(document.getElementById('maxInput').value, 10);
   if(!v || v < 1){ showToast('請輸入有效的人數'); return; }
+  
+  const prevMax = state.maxPerDay;
+  state.maxPerDay = v;
+  saveLocalCache();
+  closeSettings(); 
+  renderApp();
+  showToast(`每日上限已更新為 ${v} 人 (背景同步中...)`);
+
   try{
     await apiCall({action:'setMaxPerDay', value: v});
-    state.maxPerDay = v;
     state.backendAvailable = true;
-    showToast(`每日上限已更新為 ${v} 人`);
   }catch(e){
-    showToast('更新失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
+    state.maxPerDay = prevMax;
+    saveLocalCache();
+    renderApp();
+    showToast('更新失敗——連不上後端，已還原人數上限');
   }
-  closeSettings(); renderApp();
 }
 
 /* ================= EMPLOYEE VIEW ================= */
@@ -742,7 +816,7 @@ function renderEmployeeView(){
       <div class="holiday-chips">
         ${sortedHolidays.length ? sortedHolidays.map(h=>{
           const isPastYear = parseInt(h.date.slice(0,4),10) < new Date().getFullYear();
-          return `<span class="holiday-chip">${h.date}　${escapeHtml(h.name)}${isPastYear ? `<button class="chip-del" onclick="removeHoliday('${h.date}')" title="刪除這筆（已是過去年度）">✕</button>` : ''}</span>`;
+          return `<span class="holiday-chip">${h.date} ${escapeHtml(h.name)}${isPastYear ? `<button class="chip-del" onclick="removeHoliday('${h.date}')" title="刪除這筆（已是過去年度）">✕</button>` : ''}</span>`;
         }).join('') : '<span style="font-size:12px;color:var(--ink-soft);">尚未設定</span>'}
       </div>
       <p class="sub" style="margin:0 0 8px;">往年（今年以前）的假日資料旁邊會有 ✕ 可以個別刪除，方便清掉不再需要的舊資料；今年與未來年度的資料為避免誤刪不提供逐筆刪除，如需整批清空可用上方「清空清單」。</p>
@@ -752,9 +826,9 @@ function renderEmployeeView(){
       <h2>如果自動抓取失敗，自己手動更新</h2>
       <p class="sub">自動抓取偶爾會因為網路限制或該年度資料還沒公開而失敗。這時任何接手的人都可以照下面步驟自己完成，不需要依賴特定人員：</p>
       <ol style="font-size:12.5px;color:var(--ink-soft);line-height:1.9;margin:0 0 14px;padding-left:20px;">
-        <li>查詢正式公告：到人事行政總處全球資訊網（<a href="https://www.dgpa.gov.tw" target="_blank" rel="noopener">www.dgpa.gov.tw</a>），或用搜尋引擎搜尋「人事行政總處　OO年　政府行政機關辦公日曆表」，找到當年度的正式公告。</li>
+        <li>查詢正式公告：到人事行政總處全球資訊網（<a href="https://www.dgpa.gov.tw" target="_blank" rel="noopener">www.dgpa.gov.tw</a>），或用搜尋引擎搜尋「人事行政總處 OO年 政府行政機關辦公日曆表」，找到當年度的正式公告。</li>
         <li>把公告裡列出的每個國定假日，整理成「日期,假別名稱」，一行一筆，例如：<br><code style="font-family:var(--mono);">2028-01-01,元旦</code></li>
-        <li>把整理好的內容貼到下方文字框，按「儲存手動清單」即可，所有同事會立刻看到更新後的清單。</li>
+        <li>把整理好的內容貼到下方文字框，按「儲存手動清單」即可，所有同事會開啟時看到更新後的清單。</li>
       </ol>
       <details class="advanced" open>
         <summary>手動編輯清單</summary>
@@ -839,33 +913,58 @@ async function handleImportFile(evt){
   evt.target.value = '';
 }
 
+/* 樂觀更新：新增員工 */
 async function handleAddEmployee(evt){
   evt.preventDefault();
   const empId = document.getElementById('empIdNew').value.trim();
   const name = document.getElementById('empNameNew').value.trim();
   if(!empId || !name){ showToast('請輸入員工編號與姓名'); return false; }
-  const existing = state.employees.find(e=>e.empId===empId);
+  
+  const existingIndex = state.employees.findIndex(e=>e.empId===empId);
+  const oldEmp = existingIndex >= 0 ? {...state.employees[existingIndex]} : null;
+  
+  if(existingIndex >= 0){
+    state.employees[existingIndex].name = name;
+  } else {
+    state.employees.push({empId, name});
+  }
+  saveLocalCache();
+  renderApp();
+  showToast(oldEmp ? `已更新 ${empId} 的姓名 (背景同步中...)` : `已新增 ${name}（${empId}） (背景同步中...)`);
+
   try{
     await apiCall({action:'addEmployee', empId, name});
-    if(existing){ existing.name = name; } else { state.employees.push({empId, name}); }
     state.backendAvailable = true;
-    showToast(existing ? `已更新 ${empId} 的姓名` : `已新增 ${name}（${empId}）`);
   }catch(e){
-    showToast('更新失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
+    if(oldEmp){
+      state.employees[existingIndex] = oldEmp;
+    } else {
+      state.employees = state.employees.filter(e=>e.empId!==empId);
+    }
+    saveLocalCache();
+    renderApp();
+    showToast('新增／更新失敗——連不上後端，已還原變更');
   }
-  renderApp();
   return false;
 }
+
+/* 樂觀更新：刪除員工 */
 async function removeEmployee(empId){
+  const originalEmp = [...state.employees];
+  state.employees = state.employees.filter(e=>e.empId!==empId);
+  saveLocalCache();
+  renderApp();
+  showToast('已刪除該員工 (背景同步中...)');
+
   try{
     await apiCall({action:'removeEmployee', empId});
-    state.employees = state.employees.filter(e=>e.empId!==empId);
     state.backendAvailable = true;
-    showToast('已刪除該員工（歷史登記紀錄仍會保留姓名）');
   }catch(e){
-    showToast('刪除失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
+    state.employees = originalEmp;
+    saveLocalCache();
+    renderApp();
+    showToast('刪除失敗——連不上後端，已還原該員工');
   }
-  renderApp();
 }
 
 function mergeHolidaysLocal(list){
@@ -882,6 +981,7 @@ async function applyYearHolidays(){
     const items = list.map(h => `${h.date}:${h.name}`).join('|');
     await apiCall({action:'addHolidays', items});
     mergeHolidaysLocal(list);
+    saveLocalCache();
     state.backendAvailable = true;
     showToast(`已帶入 ${y} 年國定假日（共 ${list.length} 天）`);
   }catch(e){
@@ -895,9 +995,6 @@ async function fetchAndApplyYear(){
   const btn = document.getElementById('fetchBtn');
   if(btn){ btn.disabled = true; btn.textContent = '抓取中…'; }
   try{
-    // Community-maintained, CORS-friendly mirror of the government office calendar
-    // (compiled from official DGPA announcements). The DGPA site itself blocks
-    // automated access, so this is the practical way to fetch data live.
     const url = `https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`;
     const res = await fetch(url);
     if(!res.ok) throw new Error('http-'+res.status);
@@ -913,6 +1010,7 @@ async function fetchAndApplyYear(){
     const items = list.map(h => `${h.date}:${h.name}`).join('|');
     await apiCall({action:'addHolidays', items});
     mergeHolidaysLocal(list);
+    saveLocalCache();
     state.backendAvailable = true;
     showToast(`已自動抓取並帶入 ${year} 年國定假日（共 ${list.length} 天），建議對照官方公告再核對一次`);
   }catch(e){
@@ -920,12 +1018,14 @@ async function fetchAndApplyYear(){
   }
   renderApp();
 }
+
 async function removeHoliday(dateStr){
   const y = parseInt(dateStr.slice(0,4),10);
   if(y >= new Date().getFullYear()){ showToast('今年與未來年度的資料不提供逐筆刪除'); return; }
   try{
     await apiCall({action:'removeHoliday', date: dateStr});
     state.holidays = state.holidays.filter(h => h.date !== dateStr);
+    saveLocalCache();
     state.backendAvailable = true;
     showToast(`已刪除 ${dateStr}`);
   }catch(e){
@@ -933,11 +1033,13 @@ async function removeHoliday(dateStr){
   }
   renderApp();
 }
+
 async function clearHolidays(){
   if(!confirm('確定要清空整份國定假日清單嗎？')) return;
   try{
     await apiCall({action:'clearHolidays'});
     state.holidays = [];
+    saveLocalCache();
     state.backendAvailable = true;
     showToast('已清空國定假日清單');
   }catch(e){
@@ -945,6 +1047,7 @@ async function clearHolidays(){
   }
   renderApp();
 }
+
 async function saveHolidaysManual(){
   const raw = document.getElementById('holidayTextarea').value;
   const lines = raw.split('\n').map(s=>s.trim()).filter(Boolean);
@@ -965,6 +1068,7 @@ async function saveHolidaysManual(){
       await apiCall({action:'addHolidays', items});
     }
     state.holidays = parsed;
+    saveLocalCache();
     state.backendAvailable = true;
     showToast('國定假日清單已更新');
   }catch(e){
@@ -978,8 +1082,6 @@ function computeStatsRows(year){
   const map = {};
   state.employees.forEach(emp=>{ map[emp.empId] = {empId: emp.empId, name: emp.name, confirmed:0, tentative:0, holiday:0}; });
   state.entries.forEach(sub=>{
-    // A submission is counted under the year of its START date (not every year it
-    // touches) — e.g. 2026-12-27 ~ 2027-01-10 counts entirely as a 2026 registration.
     const startYear = parseInt(sub.dates[0].slice(0,4), 10);
     if(startYear !== year) return;
     const matched = sub.empId && state.employees.some(e=>e.empId===sub.empId);
@@ -1032,15 +1134,22 @@ function renderStatsView(){
   `;
 }
 
+/* 樂觀更新：公告事項 */
 async function saveNotice(){
   const text = document.getElementById('noticeTextarea').value;
+  const oldNotice = state.notice;
+  state.notice = text;
+  saveLocalCache();
+  showToast('注意事項已更新 (背景同步中...)');
+
   try{
     await apiCall({action:'setNotice', text});
-    state.notice = text;
     state.backendAvailable = true;
-    showToast('注意事項已更新');
   }catch(e){
-    showToast('更新失敗——連不上後端（Google 那邊回應較慢或逾時），請稍等一下再試一次');
+    state.notice = oldNotice;
+    saveLocalCache();
+    renderApp();
+    showToast('更新失敗——連不上後端，已還原公告');
   }
 }
 
