@@ -67,13 +67,11 @@
   .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);}
   .legend-dot{width:8px;height:8px;border-radius:2px;}
   .legend-tag{font-size:10.5px;font-weight:700;color:var(--warn);background:var(--warn-bg);border-radius:4px;padding:1px 5px;}
-  .summary-note{font-family:var(--mono);font-size:12px;color:var(--ink-soft);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;}
-  .summary-note b{color:var(--ink);font-weight:700;}
 
   .weekday-row{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:6px;}
   .weekday-row div{font-family:var(--mono);font-size:12.5px;letter-spacing:.08em;color:var(--ink-soft);text-align:center;padding:4px 0;}
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
-  .day-cell{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);min-height:108px;padding:8px;cursor:pointer;display:flex;flex-direction:column;gap:6px;position:relative;}
+  .day-cell{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);min-height:108px;padding:8px;cursor:pointer;display:flex;flex-direction:column;gap:5px;position:relative;}
   .day-cell:hover{border-color:var(--line-strong);box-shadow:0 2px 8px rgba(30,42,50,.08);}
   .day-cell.empty{background:transparent;border-color:transparent;cursor:default;box-shadow:none;}
   .day-cell.weekend .day-num{color:var(--ink-soft);}
@@ -85,9 +83,24 @@
   .day-cell.status-warn{background:var(--warn-bg);}
   .day-cell.status-full{background:var(--full-bg);border-color:var(--full);}
   .overflow-note{font-family:var(--mono);font-size:10px;color:var(--full);font-weight:700;}
-  .name-list{font-size:14px;font-weight:700;color:var(--ink);line-height:1.4;}
-  .name-list .more{color:var(--info);font-weight:600;}
-  .name-list .tt{color:var(--warn);}
+
+  /* 🎯 膠囊人名標籤與懸浮高亮 Hover 樣式 */
+  .tag-pill-list { display:flex; flex-direction:column; gap:3px; }
+  .tag-pill {
+    font-size:12px; font-weight:700; padding:2px 6px; border-radius:5px;
+    display:flex; align-items:center; justify-content:space-between;
+    transition:all 0.18s ease; cursor:pointer; border:1px solid rgba(0,0,0,0.08);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .tag-pill.tt { border-style:dashed; opacity:0.85; }
+  .tag-pill .tt-dot { font-size:10px; margin-left:3px; }
+
+  .cal-grid:hover .tag-pill { opacity:0.3; filter:grayscale(30%); }
+  .cal-grid .tag-pill.highlight,
+  .cal-grid:hover .tag-pill:hover {
+    opacity:1 !important; filter:grayscale(0%) !important;
+    transform:scale(1.05); box-shadow:0 2px 8px rgba(0,0,0,0.18); z-index:3;
+  }
 
   .overlay{position:fixed;inset:0;background:rgba(30,42,50,.28);display:none;align-items:stretch;justify-content:flex-end;z-index:50;}
   .overlay.show{display:flex;}
@@ -134,9 +147,11 @@
   table.data-table td.num{font-variant-numeric:tabular-nums;font-weight:700;}
   table.data-table tr.total-row td{font-weight:700;border-top:2px solid var(--line-strong);border-bottom:none;}
 
-  .emp-add-grid{display:grid;grid-template-columns:1fr 1.4fr auto;gap:10px;align-items:end;margin-bottom:18px;}
+  /* 🎯 員工列表編輯新增顏色選擇器 */
+  .emp-add-grid{display:grid;grid-template-columns:1fr 1.2fr auto auto;gap:10px;align-items:end;margin-bottom:18px;}
   .emp-add-grid .qa-field label{display:block;font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
-  .emp-add-grid input{width:100%;font:inherit;font-size:14px;padding:9px 10px;border-radius:8px;border:1px solid var(--line-strong);}
+  .emp-add-grid input[type=text]{width:100%;font:inherit;font-size:14px;padding:9px 10px;border-radius:8px;border:1px solid var(--line-strong);}
+  .emp-color-picker{width:38px;height:38px;padding:2px;border-radius:8px;border:1px solid var(--line-strong);cursor:pointer;background:none;}
   @media (max-width:600px){.emp-add-grid{grid-template-columns:1fr;}}
 
   .holiday-row{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
@@ -416,6 +431,19 @@ function nameForEmpId(empId){
 }
 function displayName(sub){ return (sub.empId && nameForEmpId(sub.empId)) || sub.name || '(未命名)'; }
 
+/* 🎯 顏色演算法：自動根據姓名/代號算配色，也可被手動顏色覆蓋 */
+function getEmpColor(empKey, customColor){
+  if(customColor) return { bg: customColor, text: '#ffffff' };
+  let hash = 0;
+  const str = empKey || 'default';
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  const h = Math.abs(hash) % 360;
+  return {
+    bg: `hsl(${h}, 70%, 90%)`,
+    text: `hsl(${h}, 80%, 25%)`
+  };
+}
+
 function showToast(msg, duration = 3000){
   const container = document.getElementById('toastContainer');
   const t = document.getElementById('toast');
@@ -517,7 +545,7 @@ function renderCalendarView(){
       <div class="legend">
         <div class="legend-item"><span class="legend-dot" style="background:var(--warn-bg);border:1px solid var(--warn);"></span>剩最後 1 位</div>
         <div class="legend-item"><span class="legend-dot" style="background:var(--full-bg);border:1px solid var(--full);"></span>已達上限（整格變色）</div>
-        <div class="legend-item"><span class="legend-tag">暫定</span>暫定登記</div>
+        <div class="legend-item"><span class="legend-tag">虛線</span>暫定登記</div>
         <div class="legend-item" style="color:var(--full);">紅色日期＝國定假日</div>
       </div>
     </div>
@@ -525,6 +553,7 @@ function renderCalendarView(){
     <div class="cal-grid" id="calGrid"></div>
   `;
   renderGrid(y, m);
+  bindGridHoverEvents();
 
   const qaStart = document.getElementById('qaStart');
   const qaEnd = document.getElementById('qaEnd');
@@ -537,6 +566,20 @@ function renderCalendarView(){
   if(qaEnd) qaEnd.dataset.forStart = qaStart.value;
   const qaEmpId = document.getElementById('qaEmpId');
   if(qaEmpId && state.myEmpId){ qaEmpId.value = state.myEmpId; handleEmpIdInput(); }
+}
+
+function bindGridHoverEvents(){
+  const grid = document.getElementById('calGrid');
+  if(!grid) return;
+  grid.addEventListener('mouseover', (e) => {
+    const pill = e.target.closest('.tag-pill');
+    if (!pill) return;
+    const empKey = pill.dataset.empkey;
+    document.querySelectorAll(`.tag-pill[data-empkey="${empKey}"]`).forEach(el => el.classList.add('highlight'));
+  });
+  grid.addEventListener('mouseout', (e) => {
+    document.querySelectorAll('.tag-pill.highlight').forEach(el => el.classList.remove('highlight'));
+  });
 }
 
 function handleStartDateChange(){
@@ -595,15 +638,31 @@ function renderGrid(y, m){
     const count = daySubs.length;
     const status = statusFor(count);
     const overflow = count > state.maxPerDay ? `<div class="overflow-note">超額 +${count-state.maxPerDay}</div>` : '';
-    const namesToShow = daySubs.slice(0,2).map(e=>`${escapeHtml(displayName(e))}${e.tentative?'<span class="tt">・暫</span>':''}`).join('、');
-    const moreCount = daySubs.length - 2;
-    const namesHtml = daySubs.length ? `<div class="name-list">${namesToShow}${moreCount>0 ? ` <span class="more">+${moreCount}</span>` : ''}</div>` : '';
+    
+    /* 🎯 美化後的膠囊標籤 HTML 渲染 */
+    const tagPillsHtml = daySubs.map(e => {
+      const nameStr = displayName(e);
+      const empObj = state.employees.find(x => x.empId.trim().toUpperCase() === (e.empId||'').trim().toUpperCase());
+      const empKey = e.empId ? e.empId.trim().toUpperCase() : nameStr;
+      const colorScheme = getEmpColor(empKey, empObj ? empObj.color : null);
+      
+      return `
+        <div class="tag-pill ${e.tentative?'tt':''}" 
+             data-empkey="${escapeHtml(empKey)}"
+             style="background-color:${colorScheme.bg}; color:${colorScheme.text};"
+             title="${escapeHtml(nameStr)}${e.tentative?' (暫定)':''}">
+          <span>${escapeHtml(nameStr)}</span>
+          ${e.tentative ? '<span class="tt-dot">暫</span>' : ''}
+        </div>
+      `;
+    }).join('');
+
     html += `
       <div class="day-cell status-${status} ${isWeekend?'weekend':''} ${isToday?'today':''} ${holiday?'holiday':''}" onclick="openDay('${dateStr}')">
         <div class="day-num ${isToday?'today-badge':''}">${d}</div>
         ${holiday ? `<div class="holiday-tag" title="${escapeHtml(holidayLabel)}">${escapeHtml(holidayLabel)}</div>` : ''}
         ${overflow}
-        ${namesHtml}
+        <div class="tag-pill-list">${tagPillsHtml}</div>
       </div>
     `;
   }
@@ -861,26 +920,35 @@ function renderEmployeeView(){
     </div>
 
     <div class="card">
-      <h2>員工名冊</h2>
-      <p class="sub">設定員工編號與姓名，之後在行事曆登記假別時輸入編號即可自動帶入姓名；統計頁面也會依這裡的姓名自動顯示（修改姓名後，歷史紀錄會一起更新）。</p>
+      <h2>員工名冊與代表色設定</h2>
+      <p class="sub">設定員工編號與姓名，並可自由點選色盤調整代表色（若未選擇，系統會自動分配專屬配色）。設定後行事曆上的名牌膠囊與高亮效果將同步更新。</p>
       <form onsubmit="return handleAddEmployee(event)">
         <div class="emp-add-grid">
           <div class="qa-field"><label for="empIdNew">員工編號</label><input type="text" id="empIdNew" placeholder="例如 E001" required></div>
           <div class="qa-field"><label for="empNameNew">姓名</label><input type="text" id="empNameNew" placeholder="輸入姓名" required></div>
+          <div class="qa-field"><label>代表色</label><input type="color" id="empColorNew" class="emp-color-picker" value="#3D5A80"></div>
           <button type="submit" class="qa-submit">新增／更新</button>
         </div>
       </form>
       <table class="data-table">
-        <thead><tr><th>員工編號</th><th>姓名</th><th></th></tr></thead>
+        <thead><tr><th>員工編號</th><th>姓名</th><th>代表色</th><th></th></tr></thead>
         <tbody>
-          ${sortedEmp.length===0 ? `<tr><td colspan="3" style="color:var(--ink-soft);text-align:center;padding:16px 0;">尚未設定員工</td></tr>` :
-            sortedEmp.map(e=>`
+          ${sortedEmp.length===0 ? `<tr><td colspan="4" style="color:var(--ink-soft);text-align:center;padding:16px 0;">尚未設定員工</td></tr>` :
+            sortedEmp.map(e=>{
+              const colorScheme = getEmpColor(e.empId, e.color);
+              return `
               <tr>
                 <td>${escapeHtml(e.empId)}</td>
                 <td>${escapeHtml(e.name)}</td>
+                <td>
+                  <span class="tag-pill" style="background-color:${colorScheme.bg}; color:${colorScheme.text}; display:inline-block; padding:3px 10px;">
+                    ${escapeHtml(e.name)}
+                  </span>
+                </td>
                 <td style="text-align:right;"><button class="del-btn" onclick="removeEmployee('${escapeHtml(e.empId)}')" title="刪除">✕</button></td>
               </tr>
-            `).join('')}
+            `;
+            }).join('')}
         </tbody>
       </table>
     </div>
@@ -992,7 +1060,7 @@ async function handleImportFile(evt){
 
     showToast('⏳ 匯入中，請稍候…', 0);
     for(const emp of employees){
-      if(emp && emp.empId) await apiCall({action:'addEmployee', empId: emp.empId, name: emp.name || ''});
+      if(emp && emp.empId) await apiCall({action:'addEmployee', empId: emp.empId, name: emp.name || '', color: emp.color || ''});
     }
     for(const en of entries){
       const dates = Array.isArray(en.dates) ? en.dates.join(',') : (en.dates || '');
@@ -1020,6 +1088,7 @@ async function handleAddEmployee(evt){
   evt.preventDefault();
   const empIdRaw = document.getElementById('empIdNew').value.trim();
   const name = document.getElementById('empNameNew').value.trim();
+  const color = document.getElementById('empColorNew').value;
   if(!empIdRaw || !name){ showToast('請輸入員工編號與姓名'); return false; }
   
   const empId = empIdRaw.toUpperCase();
@@ -1028,15 +1097,16 @@ async function handleAddEmployee(evt){
   
   if(existingIndex >= 0){
     state.employees[existingIndex].name = name;
+    state.employees[existingIndex].color = color;
   } else {
-    state.employees.push({empId, name});
+    state.employees.push({empId, name, color});
   }
   saveLocalCache();
   renderApp();
   showToast('⏳ 員工資料同步中，請稍候…', 0);
 
   try{
-    await apiCall({action:'addEmployee', empId, name});
+    await apiCall({action:'addEmployee', empId, name, color});
     state.backendAvailable = true;
     showToast('✅ 員工資料已成功同步更新！', 3500);
   }catch(e){
