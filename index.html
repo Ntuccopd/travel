@@ -81,7 +81,7 @@
   .day-num.today-badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;}
   .holiday-tag{font-family:var(--mono);font-size:11px;color:var(--full);font-weight:700;}
   
-  /* 🎯 右上角狀態標籤：強制不換行橫排 */
+  /* 右上角狀態標籤：橫排不換行 */
   .status-badge{
     font-size:10px;font-weight:800;padding:1px 4px;border-radius:4px;color:#fff;
     white-space:nowrap;flex-shrink:0;letter-spacing:-0.5px;line-height:1.2;
@@ -91,7 +91,7 @@
 
   .overflow-note{font-family:var(--mono);font-size:10px;color:var(--full);font-weight:700;}
 
-  /* 🎯 膠囊人名標籤與懸浮高亮 Hover 樣式 */
+  /* 膠囊人名標籤與懸浮高亮 Hover 樣式 */
   .tag-pill-list { display:flex; flex-direction:column; gap:3px; }
   .tag-pill {
     font-size:12px; font-weight:700; padding:2px 6px; border-radius:5px;
@@ -184,7 +184,6 @@
   .notice-preview-box mark{background:#FEF08A;color:#854D0E;padding:2px 5px;border-radius:4px;font-weight:600;}
   .notice-preview-box .alert-text{color:#DC2626;background:#FEE2E2;padding:2px 6px;border-radius:4px;font-weight:700;}
 
-  /* 🎯 手機版微調：縮小 10號過後的日期字體，避免擠壓滿額標籤 */
   @media (max-width:640px){ 
     .day-cell{min-height:88px;padding:4px;} 
     h1{font-size:21px;} 
@@ -434,7 +433,7 @@ function nameForEmpId(empId){
 }
 function displayName(sub){ return (sub.empId && nameForEmpId(sub.empId)) || sub.name || '(未命名)'; }
 
-/* 🎯 8 種基本常見選項 */
+/* 8 種基本常見選項 */
 const BASE_PALETTE = [
   '#BAE6FD', // 1. 粉藍
   '#BBF7D0', // 2. 粉綠
@@ -446,7 +445,7 @@ const BASE_PALETTE = [
   '#3D5A80'  // 8. 經典藍
 ];
 
-/* 🎯 判斷背景色彩 Luminance 以決定文字要黑色還白色 */
+/* 判斷背景色彩 Luminance 以決定文字要黑色還白色 */
 function getContrastTextColor(hexColor) {
   if (!hexColor || !hexColor.startsWith('#')) return '#1E2A32';
   const c = hexColor.replace('#', '');
@@ -457,7 +456,7 @@ function getContrastTextColor(hexColor) {
   return yiq >= 140 ? '#101828' : '#FFFFFF';
 }
 
-/* 🎯 取得員工代表色 */
+/* 取得員工代表色 */
 function getEmpColor(empKey, customColor){
   if(customColor) {
     return { bg: customColor, text: getContrastTextColor(customColor) };
