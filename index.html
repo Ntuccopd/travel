@@ -440,7 +440,7 @@ function nameForEmpId(empId){
 }
 function displayName(sub){ return (sub.empId && nameForEmpId(sub.empId)) || sub.name || '(未命名)'; }
 
-/* 🎯 8 種好看的基本常見選項（點擊即選） */
+/* 🎯 8 種基本常見選項 */
 const BASE_PALETTE = [
   '#BAE6FD', // 1. 粉藍
   '#BBF7D0', // 2. 粉綠
@@ -926,10 +926,16 @@ function updateNoticePreview(){
 }
 
 /* ================= EMPLOYEE VIEW ================= */
+/* 🎯 點擊基本色點時，確實寫入隱藏的 input[type=color] */
 function selectPresetColor(colorHex){
-  document.getElementById('empColorNew').value = colorHex;
+  const colorInput = document.getElementById('empColorNew');
+  if(colorInput) colorInput.value = colorHex;
+  updateActiveColorDot(colorHex);
+}
+
+function updateActiveColorDot(colorHex){
   document.querySelectorAll('.color-dot').forEach(el => {
-    el.classList.toggle('active', el.dataset.color === colorHex);
+    el.classList.toggle('active', el.dataset.color.toUpperCase() === (colorHex || '').toUpperCase());
   });
 }
 
@@ -980,7 +986,7 @@ function renderEmployeeView(){
           `).join('')}
           <span style="font-size:12px;color:var(--line-strong);margin:0 4px;">|</span>
           <label style="font-size:12px;font-weight:600;color:var(--ink-soft);display:flex;align-items:center;gap:4px;cursor:pointer;">
-            自訂: <input type="color" id="empColorNew" class="emp-color-picker" value="${BASE_PALETTE[0]}">
+            自訂: <input type="color" id="empColorNew" class="emp-color-picker" value="${BASE_PALETTE[0]}" onchange="updateActiveColorDot(this.value)">
           </label>
         </div>
       </form>
