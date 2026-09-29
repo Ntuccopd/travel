@@ -77,11 +77,16 @@
   .day-cell.weekend .day-num{color:var(--ink-soft);}
   .day-cell.holiday .day-num{color:var(--full);}
   .day-cell.today{border:1.5px solid var(--today-ring);}
+  .day-num-row{display:flex;justify-content:space-between;align-items:center;}
   .day-num{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;}
   .day-num.today-badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;}
   .holiday-tag{font-family:var(--mono);font-size:11px;color:var(--full);font-weight:700;}
-  .day-cell.status-warn{background:var(--warn-bg);}
-  .day-cell.status-full{background:var(--full-bg);border-color:var(--full);}
+  
+  /* 🎯 取消原本滿額的整個粉紅色底，改用邊框與右上角醒目標籤 */
+  .day-cell.status-warn{border-color:#E8CB99;}
+  .day-cell.status-full{border:2px solid var(--full);}
+  .full-badge{font-size:10px;font-weight:800;color:#fff;background:var(--full);padding:1px 5px;border-radius:4px;}
+
   .overflow-note{font-family:var(--mono);font-size:10px;color:var(--full);font-weight:700;}
 
   /* 🎯 膠囊人名標籤與懸浮高亮 Hover 樣式 */
@@ -89,11 +94,11 @@
   .tag-pill {
     font-size:12px; font-weight:700; padding:2px 6px; border-radius:5px;
     display:flex; align-items:center; justify-content:space-between;
-    transition:all 0.18s ease; cursor:pointer; border:1px solid rgba(0,0,0,0.08);
+    transition:all 0.18s ease; cursor:pointer; border:1px solid rgba(0,0,0,0.12);
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   .tag-pill.tt { border-style:dashed; opacity:0.85; }
-  .tag-pill .tt-dot { font-size:10px; margin-left:3px; }
+  .tag-pill .tt-dot { font-size:10px; margin-left:3px; opacity:0.8; }
 
   .cal-grid:hover .tag-pill { opacity:0.3; filter:grayscale(30%); }
   .cal-grid .tag-pill.highlight,
@@ -147,7 +152,6 @@
   table.data-table td.num{font-variant-numeric:tabular-nums;font-weight:700;}
   table.data-table tr.total-row td{font-weight:700;border-top:2px solid var(--line-strong);border-bottom:none;}
 
-  /* 🎯 員工列表編輯新增顏色選擇器 */
   .emp-add-grid{display:grid;grid-template-columns:1fr 1.2fr auto auto;gap:10px;align-items:end;margin-bottom:18px;}
   .emp-add-grid .qa-field label{display:block;font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
   .emp-add-grid input[type=text]{width:100%;font:inherit;font-size:14px;padding:9px 10px;border-radius:8px;border:1px solid var(--line-strong);}
@@ -431,17 +435,40 @@ function nameForEmpId(empId){
 }
 function displayName(sub){ return (sub.empId && nameForEmpId(sub.empId)) || sub.name || '(未命名)'; }
 
-/* 🎯 顏色演算法：自動根據姓名/代號算配色，也可被手動顏色覆蓋 */
+/* 🎯 8 組基本調和顏色庫（高對比，絕不撞色） */
+const BASE_PALETTE = [
+  '#BAE6FD', // 淺藍
+  '#BBF7D0', // 淺綠
+  '#FED7AA', // 亮粉橘
+  '#DDD6FE', // 淺紫
+  '#FBCFE8', // 淺粉紅
+  '#FEF08A', // 淺黃
+  '#C7D2FE', // 靛藍
+  '#A7F3D0'  // 薄荷綠
+];
+
+/* 🎯 判斷背景色彩 Luminance 以決定文字要黑色還白色（解決橘色底配白字問題） */
+function getContrastTextColor(hexColor) {
+  if (!hexColor || !hexColor.startsWith('#')) return '#1E2A32';
+  const c = hexColor.replace('#', '');
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 140 ? '#101828' : '#FFFFFF';
+}
+
+/* 🎯 取得員工代表色 */
 function getEmpColor(empKey, customColor){
-  if(customColor) return { bg: customColor, text: '#ffffff' };
+  if(customColor) {
+    return { bg: customColor, text: getContrastTextColor(customColor) };
+  }
   let hash = 0;
   const str = empKey || 'default';
   for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  const h = Math.abs(hash) % 360;
-  return {
-    bg: `hsl(${h}, 70%, 90%)`,
-    text: `hsl(${h}, 80%, 25%)`
-  };
+  const colorIndex = Math.abs(hash) % BASE_PALETTE.length;
+  const bg = BASE_PALETTE[colorIndex];
+  return { bg, text: getContrastTextColor(bg) };
 }
 
 function showToast(msg, duration = 3000){
@@ -543,8 +570,8 @@ function renderCalendarView(){
     </div>
     <div class="info-row">
       <div class="legend">
-        <div class="legend-item"><span class="legend-dot" style="background:var(--warn-bg);border:1px solid var(--warn);"></span>剩最後 1 位</div>
-        <div class="legend-item"><span class="legend-dot" style="background:var(--full-bg);border:1px solid var(--full);"></span>已達上限（整格變色）</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#E8CB99;border:1px solid var(--warn);"></span>剩最後 1 位（黃框）</div>
+        <div class="legend-item"><span class="full-badge">滿額</span> 已達上限（粗紅框）</div>
         <div class="legend-item"><span class="legend-tag">虛線</span>暫定登記</div>
         <div class="legend-item" style="color:var(--full);">紅色日期＝國定假日</div>
       </div>
@@ -639,7 +666,7 @@ function renderGrid(y, m){
     const status = statusFor(count);
     const overflow = count > state.maxPerDay ? `<div class="overflow-note">超額 +${count-state.maxPerDay}</div>` : '';
     
-    /* 🎯 美化後的膠囊標籤 HTML 渲染 */
+    /* 🎯 膠囊標籤與動態文字對比度 */
     const tagPillsHtml = daySubs.map(e => {
       const nameStr = displayName(e);
       const empObj = state.employees.find(x => x.empId.trim().toUpperCase() === (e.empId||'').trim().toUpperCase());
@@ -659,7 +686,10 @@ function renderGrid(y, m){
 
     html += `
       <div class="day-cell status-${status} ${isWeekend?'weekend':''} ${isToday?'today':''} ${holiday?'holiday':''}" onclick="openDay('${dateStr}')">
-        <div class="day-num ${isToday?'today-badge':''}">${d}</div>
+        <div class="day-num-row">
+          <div class="day-num ${isToday?'today-badge':''}">${d}</div>
+          ${status === 'full' ? `<span class="full-badge">滿額</span>` : ''}
+        </div>
         ${holiday ? `<div class="holiday-tag" title="${escapeHtml(holidayLabel)}">${escapeHtml(holidayLabel)}</div>` : ''}
         ${overflow}
         <div class="tag-pill-list">${tagPillsHtml}</div>
@@ -921,17 +951,17 @@ function renderEmployeeView(){
 
     <div class="card">
       <h2>員工名冊與代表色設定</h2>
-      <p class="sub">設定員工編號與姓名，並可自由點選色盤調整代表色（若未選擇，系統會自動分配專屬配色）。設定後行事曆上的名牌膠囊與高亮效果將同步更新。</p>
+      <p class="sub">設定員工編號與姓名，預設會從基礎色盤自動指派高對比色彩；也可隨時點選右側色盤微調代表色。系統會自動調整字體黑白顏色以維持最高清晰度。</p>
       <form onsubmit="return handleAddEmployee(event)">
         <div class="emp-add-grid">
           <div class="qa-field"><label for="empIdNew">員工編號</label><input type="text" id="empIdNew" placeholder="例如 E001" required></div>
           <div class="qa-field"><label for="empNameNew">姓名</label><input type="text" id="empNameNew" placeholder="輸入姓名" required></div>
-          <div class="qa-field"><label>代表色</label><input type="color" id="empColorNew" class="emp-color-picker" value="#3D5A80"></div>
+          <div class="qa-field"><label>代表色</label><input type="color" id="empColorNew" class="emp-color-picker" value="#BAE6FD"></div>
           <button type="submit" class="qa-submit">新增／更新</button>
         </div>
       </form>
       <table class="data-table">
-        <thead><tr><th>員工編號</th><th>姓名</th><th>代表色</th><th></th></tr></thead>
+        <thead><tr><th>員工編號</th><th>姓名</th><th>代表色預覽</th><th></th></tr></thead>
         <tbody>
           ${sortedEmp.length===0 ? `<tr><td colspan="4" style="color:var(--ink-soft);text-align:center;padding:16px 0;">尚未設定員工</td></tr>` :
             sortedEmp.map(e=>{
