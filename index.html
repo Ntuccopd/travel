@@ -452,21 +452,26 @@ const BASE_PALETTE = [
   '#3D5A80'  // 8. 經典藍
 ];
 
-/* 判斷背景色彩 Luminance 以決定文字要黑色還白色 */
+/* 判斷背景色彩亮度，決定文字要黑色還是白色 */
 function getContrastTextColor(hexColor) {
   if (!hexColor || !hexColor.startsWith('#')) return '#1E2A32';
-  const c = hexColor.replace('#', '');
+  let c = hexColor.replace('#', '').trim();
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  if (c.length !== 6) return '#1E2A32';
+  
   const r = parseInt(c.substring(0, 2), 16);
   const g = parseInt(c.substring(2, 4), 16);
   const b = parseInt(c.substring(4, 6), 16);
+  // YIQ 亮度計算：小於 128 代表背景偏深，文字自動轉白色
   const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-  return yiq >= 140 ? '#101828' : '#FFFFFF';
+  return yiq >= 128 ? '#101828' : '#FFFFFF';
 }
 
-/* 🎯 關鍵修復：取得員工代表色 */
+/* 取得員工代表色 */
 function getEmpColor(empKey, customColor){
   if(customColor && typeof customColor === 'string' && customColor.trim() !== '') {
-    return { bg: customColor.trim(), text: getContrastTextColor(customColor.trim()) };
+    const cleanColor = customColor.trim();
+    return { bg: cleanColor, text: getContrastTextColor(cleanColor) };
   }
   let hash = 0;
   const str = empKey || 'default';
