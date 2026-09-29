@@ -390,7 +390,7 @@ async function refreshFromServer(){
     const data = await apiCall({action: 'getAll'});
     state.entries = (data.entries || []).map(e => ({...e, dates: Array.isArray(e.dates) ? e.dates : []}));
     
-    // 🎯 這裡修正：正確把試算表回傳的 color 設定進物件中
+    // 🎯 正確解析並帶入 color
     state.employees = (data.employees || []).map(emp => ({
       empId: String(emp.empId || ''),
       name: String(emp.name || ''),
@@ -920,15 +920,20 @@ function updateNoticePreview(){
 }
 
 /* ================= EMPLOYEE VIEW ================= */
+
+/* 🎯 點選基本預設顏色 */
 function selectPresetColor(colorHex){
   const colorInput = document.getElementById('empColorNew');
   if(colorInput) colorInput.value = colorHex;
   updateActiveColorDot(colorHex);
 }
 
+/* 🎯 更新顏色選擇點高亮 */
 function updateActiveColorDot(colorHex){
+  const colorInput = document.getElementById('empColorNew');
+  const curHex = colorHex || (colorInput ? colorInput.value : '');
   document.querySelectorAll('.color-dot').forEach(el => {
-    el.classList.toggle('active', (el.dataset.color || '').toUpperCase() === (colorHex || '').toUpperCase());
+    el.classList.toggle('active', (el.dataset.color || '').toUpperCase() === (curHex || '').toUpperCase());
   });
 }
 
