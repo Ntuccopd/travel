@@ -81,7 +81,7 @@
   .day-num.today-badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;}
   .holiday-tag{font-family:var(--mono);font-size:11px;color:var(--full);font-weight:700;}
   
-  /* 右上角狀態標籤：橫排不換行 */
+  /* 右上角狀態標籤：強制橫排不換行 */
   .status-badge{
     font-size:10px;font-weight:800;padding:1px 4px;border-radius:4px;color:#fff;
     white-space:nowrap;flex-shrink:0;letter-spacing:-0.5px;line-height:1.2;
@@ -389,7 +389,14 @@ async function refreshFromServer(){
   try{
     const data = await apiCall({action: 'getAll'});
     state.entries = (data.entries || []).map(e => ({...e, dates: Array.isArray(e.dates) ? e.dates : []}));
-    state.employees = data.employees || [];
+    
+    // 🎯 這裡修正：正確把試算表回傳的 color 設定進物件中
+    state.employees = (data.employees || []).map(emp => ({
+      empId: String(emp.empId || ''),
+      name: String(emp.name || ''),
+      color: String(emp.color || '')
+    }));
+
     state.holidays = (data.holidays || []).map(h => typeof h === 'string' ? {date:h, name:'國定假日'} : h);
     state.notice = data.notice || '';
     state.maxPerDay = Number(data.maxPerDay) || 3;
@@ -921,7 +928,7 @@ function selectPresetColor(colorHex){
 
 function updateActiveColorDot(colorHex){
   document.querySelectorAll('.color-dot').forEach(el => {
-    el.classList.toggle('active', el.dataset.color.toUpperCase() === (colorHex || '').toUpperCase());
+    el.classList.toggle('active', (el.dataset.color || '').toUpperCase() === (colorHex || '').toUpperCase());
   });
 }
 
