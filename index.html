@@ -463,10 +463,10 @@ function getContrastTextColor(hexColor) {
   return yiq >= 140 ? '#101828' : '#FFFFFF';
 }
 
-/* 取得員工代表色 */
+/* 🎯 關鍵修復：取得員工代表色 */
 function getEmpColor(empKey, customColor){
-  if(customColor) {
-    return { bg: customColor, text: getContrastTextColor(customColor) };
+  if(customColor && typeof customColor === 'string' && customColor.trim() !== '') {
+    return { bg: customColor.trim(), text: getContrastTextColor(customColor.trim()) };
   }
   let hash = 0;
   const str = empKey || 'default';
@@ -921,14 +921,12 @@ function updateNoticePreview(){
 
 /* ================= EMPLOYEE VIEW ================= */
 
-/* 🎯 點選基本預設顏色 */
 function selectPresetColor(colorHex){
   const colorInput = document.getElementById('empColorNew');
   if(colorInput) colorInput.value = colorHex;
   updateActiveColorDot(colorHex);
 }
 
-/* 🎯 更新顏色選擇點高亮 */
 function updateActiveColorDot(colorHex){
   const colorInput = document.getElementById('empColorNew');
   const curHex = colorHex || (colorInput ? colorInput.value : '');
